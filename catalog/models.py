@@ -17,7 +17,6 @@ class Genre(models.Model):
 
 
 class Book(models.Model):
-    # Opciones predefinidas para el formato
     FORMAT_CHOICES = [
         ('NOVEL', 'Novel'),
         ('COMIC', 'Comic Book'),
@@ -27,20 +26,19 @@ class Book(models.Model):
 
     title = models.CharField(max_length=255)
     author = models.ForeignKey(Author, on_delete=models.SET_NULL, null=True)
-    genres = models.ManyToManyField(
-        Genre, help_text="Select genres for this book")
+    genres = models.ManyToManyField(Genre)
     format_type = models.CharField(
         max_length=20, choices=FORMAT_CHOICES, default='NOVEL')
-
-    # Sistema de seguimiento de lectura
     is_read = models.BooleanField(default=False)
-    rating = models.IntegerField(
-        null=True, blank=True, help_text="Rating from 1 to 5")
 
-    # Para mangas o cómics, es útil saber el número del tomo
-    volume_number = models.IntegerField(null=True, blank=True)
+    publisher = models.CharField(
+        max_length=200, null=True, blank=True)  # Editorial
+
+    # Sistema de control para Cómics/Mangas
+    is_series = models.BooleanField(default=False)
+    total_volumes = models.IntegerField(null=True, blank=True)
+    owned_volumes = models.CharField(
+        max_length=255, null=True, blank=True)
 
     def __str__(self):
-        if self.volume_number:
-            return f"{self.title} - Vol. {self.volume_number}"
         return self.title
