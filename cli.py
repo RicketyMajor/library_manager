@@ -1,9 +1,11 @@
 import os
 import django
 import typer
+from typing import Optional  # <-- NUEVO
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm, IntPrompt
+from rich import box
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'library_manager.settings')
 django.setup()
@@ -15,18 +17,57 @@ console = Console()
 # --- 1. LEER (LISTA GENERAL) ---
 
 
+# --- 1. LEER (LISTA GENERAL Y BÚSQUEDA) ---
 @app.command(name="list-books")
-def list_books():
-    """Fetches and displays all books in the library."""
+def list_books(
+    search: Optional[str] = typer.Option(
+        None, "--search", "-s", help="Search by title"),
+    author: Optional[str] = typer.Option(
+        None, "--author", "-a", help="Filter by author name"),
+    publisher: Optional[str] = typer.Option(
+        None, "--publisher", "-p", help="Filter by publisher"),
+    genre: Optional[str] = typer.Option(
+        None, "--genre", "-g", help="Filter by genre"),
+    unread: bool = typer.Option(
+        False, "--unread", "-u", help="Show only unread books"),
+):
+    """Fetches, filters, and displays books in the library."""
     from catalog.models import Book
-    books = Book.objects.all()
+
+    # 1. Consulta base
+    query = Book.objects.all()
+
+    # 2. Aplicar filtros dinámicos si el usuario pasó argumentos
+    if search:
+        # icontains busca coincidencias ignorando mayúsculas
+        query = query.filter(title__icontains=search)
+    if author:
+        query = query.filter(author__name__icontains=author)
+    if publisher:
+        query = query.filter(publisher__icontains=publisher)
+    if genre:
+        query = query.filter(genres__name__icontains=genre)
+    if unread:
+        query = query.filter(is_read=False)
+
+    # 3. Orden alfabético por título y eliminar duplicados (por si un libro tiene varios géneros)
+    books = query.order_by('title').distinct()
 
     if not books:
         console.print(
-            "[bold yellow]The library is currently empty.[/bold yellow]")
+            "[bold yellow]No books found matching your criteria.[/bold yellow]")
         return
 
-    table = Table(title="📚 My Personal Library", title_justify="center")
+    # 4. Diseño de tabla mejorado con estilo ROUNDED y contador
+    table = Table(
+        title="📚 [bold gold1]My Personal Library[/bold gold1]",
+        title_justify="center",
+        box=box.ROUNDED,  # Bordes redondeados más estéticos
+        # Pie de tabla
+        caption=f"[dim italic]Total books found: {books.count()}[/dim italic]",
+        header_style="bold cyan"
+    )
+
     table.add_column("ID", style="cyan", justify="right")
     table.add_column("Title", style="magenta")
     table.add_column("Author", style="green")
@@ -35,18 +76,23 @@ def list_books():
 
     for book in books:
         author_name = book.author.name if book.author else "Unknown"
-        is_read_status = "✅" if book.is_read else "❌"
+        is_read_status = "[bold green]✅[/bold green]" if book.is_read else "[bold red]❌[/bold red]"
 
-        # Lógica visual para diferenciar series de tomos únicos
-        title_display = book.title
+        # Construcción visual del título
+        title_display = f"[bold]{book.title}[/bold]"
         if book.is_series:
-            title_display += f" [dim](Serie: {book.owned_volumes})[/dim]"
+            title_display += f"\n[dim cyan]↳ Serie (Vols: {book.owned_volumes or 'N/A'})[/dim cyan]"
 
         table.add_row(
-            str(book.id), title_display, author_name,
-            book.get_format_type_display(), is_read_status
+            str(book.id),
+            title_display,
+            author_name,
+            book.get_format_type_display(),
+            is_read_status
         )
+
     console.print(table)
+    print("\n")
 
 # --- 2. AÑADIR ---
 
