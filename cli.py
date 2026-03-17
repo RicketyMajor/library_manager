@@ -65,6 +65,8 @@ def list_books(
     # 3. Orden alfabético por título y eliminar duplicados (por si un libro tiene varios géneros)
     books = query.order_by('title').distinct()
 
+    # ... código anterior de list_books (filtros y query) ...
+
     if not books:
         console.print(
             "[bold yellow]No books found matching your criteria.[/bold yellow]")
@@ -74,8 +76,7 @@ def list_books(
     table = Table(
         title="📚 [bold gold1]My Personal Library[/bold gold1]",
         title_justify="center",
-        box=box.ROUNDED,  # Bordes redondeados más estéticos
-        # Pie de tabla
+        box=box.ROUNDED,
         caption=f"[dim italic]Total books found: {books.count()}[/dim italic]",
         header_style="bold cyan"
     )
@@ -83,7 +84,10 @@ def list_books(
     table.add_column("ID", style="cyan", justify="right")
     table.add_column("Title", style="magenta")
     table.add_column("Author", style="green")
+    table.add_column("Publisher", style="yellow")  # <-- NUEVA COLUMNA
     table.add_column("Format", style="blue")
+    # <-- NUEVA COLUMNA (Prestado/En Biblioteca)
+    table.add_column("Status", justify="center")
     table.add_column("Read", justify="center")
 
     for book in books:
@@ -95,11 +99,22 @@ def list_books(
         if book.is_series:
             title_display += f"\n[dim cyan]↳ Serie (Vols: {book.owned_volumes or 'N/A'})[/dim cyan]"
 
+        # Lógica para determinar el estado del préstamo
+        # Buscamos si hay algún préstamo asociado a este libro que NO haya sido devuelto
+        active_loan = book.loan_set.filter(returned=False).first()
+
+        if active_loan:
+            status_display = f"[bold yellow]Lent to: {active_loan.friend.name}[/bold yellow]"
+        else:
+            status_display = "[dim green]In Library[/dim green]"
+
         table.add_row(
             str(book.id),
             title_display,
             author_name,
+            book.publisher or "-",  # Muestra "-" si no hay editorial
             book.get_format_type_display(),
+            status_display,
             is_read_status
         )
 
