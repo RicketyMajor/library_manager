@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Escáner de Biblioteca</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        text-align: center;
+        margin: 0;
+        padding: 20px;
+        background-color: #1e1e1e;
+        color: #ffffff;
+      }
+      h1 {
+        color: #00d2ff;
+      }
+      p {
+        color: #aaaaaa;
+      }
+      /* El contenedor donde vivirá la cámara */
+      #reader {
+        width: 100%;
+        max-width: 500px;
+        margin: 20px auto;
+        border: 2px dashed #00d2ff;
+        border-radius: 10px;
+        background: #2d2d2d;
+        min-height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #status {
+        margin-top: 20px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #ffcc00;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📚 Escáner de Biblioteca</h1>
+    <p>Apunta la cámara de tu teléfono al código de barras del libro.</p>
+
+    <div id="reader">Cargando cámara...</div>
+
+    <p id="status">Esperando escanear...</p>
+  </body>
+</html>

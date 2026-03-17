@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Book, Author, Genre
+from django.shortcuts import render
 
 # Importamos la herramienta que creamos para el CLI
 from cli.api import fetch_book_by_isbn
@@ -67,3 +68,10 @@ def scan_book(request):
             "author": book.author.name
         }
     }, status=status.HTTP_201_CREATED)
+
+
+def scanner_view(request):
+    """
+    Renderiza la interfaz web del escáner para dispositivos móviles.
+    """
+    return render(request, 'catalog/scanner.html')
