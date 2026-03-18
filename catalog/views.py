@@ -5,6 +5,7 @@ from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan
 from django.shortcuts import render
 from rest_framework import viewsets
 from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer, FriendSerializer, LoanSerializer
+import django_filters
 
 # Importamos la herramienta que creamos para el CLI
 from cli.api import fetch_book_by_isbn
@@ -127,10 +128,24 @@ def add_wishlist_item(request):
 # --- ENDPOINTS PARA EL CLI EMANCIPADO ---
 
 
+class BookFilter(django_filters.FilterSet):
+    # lookup_expr='icontains' significa: ignorar mayúsculas y buscar si "contiene" el texto
+    title = django_filters.CharFilter(lookup_expr='icontains')
+    author = django_filters.CharFilter(
+        field_name='author__name', lookup_expr='icontains')
+    genre = django_filters.CharFilter(
+        field_name='genres__name', lookup_expr='icontains')
+
+    class Meta:
+        model = Book
+        fields = ['title', 'author', 'genre', 'format_type', 'is_read']
+
+
 class BookViewSet(viewsets.ModelViewSet):
     """Provee operaciones CRUD automáticas para los libros de la biblioteca."""
     queryset = Book.objects.all().order_by('-id')
     serializer_class = BookSerializer
+    filterset_class = BookFilter  # <-- Conectamos nuestro nuevo filtro inteligente
 
 
 class WatcherViewSet(viewsets.ModelViewSet):

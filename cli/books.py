@@ -13,10 +13,38 @@ API_SCAN = "http://localhost:8000/api/books/scan/"
 
 
 @book_app.command(name="list")
-def list_books():
-    """Muestra todos los libros de tu biblioteca consumiendo la API REST."""
+def list_books(
+    title: str = typer.Option(None, "--title", "-t",
+                              help="Filtrar por título parcial"),
+    author: str = typer.Option(
+        None, "--author", "-a", help="Filtrar por nombre de autor"),
+    genre: str = typer.Option(None, "--genre", "-g",
+                              help="Filtrar por género"),
+    format_type: str = typer.Option(
+        None, "--format", "-f", help="Filtrar por formato (NOVEL, MANGA, COMIC)"),
+    read: bool = typer.Option(None, "--read/--unread",
+                              help="Filtrar por estado de lectura")
+):
+    """Muestra los libros de tu biblioteca con opciones de búsqueda avanzada."""
+
+    # Construimos el diccionario de parámetros para enviar en la URL
+    params = {}
+    if title:
+        params['title'] = title
+    if author:
+        params['author'] = author
+    if genre:
+        params['genre'] = genre
+    if format_type:
+        params['format_type'] = format_type.upper()
+
+    # Manejamos el booleano (si el usuario usó --read o --unread)
+    if read is not None:
+        params['is_read'] = "true" if read else "false"
+
     try:
-        response = httpx.get(API_LIBRARY)
+        # httpx convertirá el diccionario 'params' mágicamente en ?author=X&title=Y
+        response = httpx.get(API_LIBRARY, params=params)
         response.raise_for_status()
         books = response.json()
     except Exception as e:
@@ -24,11 +52,17 @@ def list_books():
         return
 
     if not books:
-        console.print("[yellow]Tu biblioteca está vacía.[/yellow]")
+        console.print(
+            "[yellow]No se encontraron libros con esos filtros.[/yellow]")
         return
 
-    table = Table(
-        title="📚 [bold blue]Mi Biblioteca[/bold blue]", box=box.ROUNDED)
+    # Imprimimos qué filtros estamos usando en el título de la tabla
+    filters_used = ", ".join([f"{k}={v}" for k, v in params.items()])
+    table_title = f"📚 [bold blue]Mi Biblioteca[/bold blue]"
+    if filters_used:
+        table_title += f" [dim](Filtros: {filters_used})[/dim]"
+
+    table = Table(title=table_title, box=box.ROUNDED)
     table.add_column("ID", justify="right", style="cyan", no_wrap=True)
     table.add_column("Título", style="magenta")
     table.add_column("Autor", style="green")
