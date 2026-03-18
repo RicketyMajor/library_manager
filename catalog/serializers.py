@@ -1,15 +1,14 @@
 from rest_framework import serializers
-from .models import Book, Author, Genre, Watcher, WishlistItem
+from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan
 
 
 class BookSerializer(serializers.ModelSerializer):
-    # Extraemos el nombre del autor para que el JSON sea más fácil de leer
     author_name = serializers.CharField(source='author.name', read_only=True)
 
     class Meta:
         model = Book
-        fields = ['id', 'title', 'author_name', 'format_type',
-                  'is_read', 'publisher', 'page_count']
+        # ¡Magia! Esto expone todos los metadatos, descripciones y URLs.
+        fields = '__all__'
 
 
 class WatcherSerializer(serializers.ModelSerializer):
@@ -21,4 +20,19 @@ class WatcherSerializer(serializers.ModelSerializer):
 class WishlistItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = WishlistItem
+        fields = '__all__'
+
+
+class FriendSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Friend
+        fields = '__all__'
+
+
+class LoanSerializer(serializers.ModelSerializer):
+    book_title = serializers.CharField(source='book.title', read_only=True)
+    friend_name = serializers.CharField(source='friend.name', read_only=True)
+
+    class Meta:
+        model = Loan
         fields = '__all__'

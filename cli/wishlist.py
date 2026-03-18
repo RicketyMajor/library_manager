@@ -103,3 +103,22 @@ def delete_wishlist_item(item_id: int = typer.Argument(..., help="ID del lanzami
             console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
     else:
         console.print("\n[yellow]Operación cancelada.[/yellow]\n")
+
+
+@wishlist_app.command(name="details")
+def wishlist_details(item_id: int = typer.Argument(..., help="ID del lanzamiento")):
+    """Muestra los detalles y el enlace de compra de un lanzamiento."""
+    try:
+        response = httpx.get(f"{API_WISHLIST}{item_id}/")
+        if response.status_code == 404:
+            console.print("[bold red]❌ Lanzamiento no encontrado.[/bold red]")
+            return
+
+        item = response.json()
+        console.print(f"\n📚 [bold cyan]{item.get('title')}[/bold cyan]")
+        console.print(f"🏢 Editorial: {item.get('publisher')}")
+        console.print(f"💰 Precio: {item.get('price')}")
+        console.print(
+            f"🔗 Link de compra: [blue underline]{item.get('buy_url')}[/blue underline]\n")
+    except Exception as e:
+        console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")

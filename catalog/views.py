@@ -1,10 +1,10 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Book, Author, Genre, Watcher, WishlistItem
+from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan
 from django.shortcuts import render
 from rest_framework import viewsets
-from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer
+from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer, FriendSerializer, LoanSerializer
 
 # Importamos la herramienta que creamos para el CLI
 from cli.api import fetch_book_by_isbn
@@ -143,3 +143,15 @@ class WishlistItemViewSet(viewsets.ModelViewSet):
     """Provee operaciones CRUD para el tablón de deseos."""
     queryset = WishlistItem.objects.all().order_by('-date_found')
     serializer_class = WishlistItemSerializer
+
+
+class FriendViewSet(viewsets.ModelViewSet):
+    """Provee operaciones CRUD para los amigos."""
+    queryset = Friend.objects.all()
+    serializer_class = FriendSerializer
+
+
+class LoanViewSet(viewsets.ModelViewSet):
+    """Provee operaciones CRUD para los préstamos."""
+    queryset = Loan.objects.all().order_by('-loan_date')
+    serializer_class = LoanSerializer

@@ -9,6 +9,8 @@ router.register(r'watchers-crud', views.WatcherViewSet,
                 basename='watcher-crud')
 router.register(r'wishlist-crud', views.WishlistItemViewSet,
                 basename='wishlist-crud')
+router.register(r'friends', views.FriendViewSet, basename='friends')
+router.register(r'loans', views.LoanViewSet, basename='loans')
 
 urlpatterns = [
     # Tus endpoints antiguos siguen funcionando intactos
