@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-
+const { CronJob } = require('cron');
 // 🌐 URLs de la API interna (Usamos 'web' porque así se llama el servicio en docker-compose)
 const API_URL_WATCHERS = 'http://web:8000/api/books/watchers/';
 const API_URL_WISHLIST = 'http://web:8000/api/books/wishlist/add/';
@@ -94,5 +94,23 @@ async function main() {
     console.log("🏁 --- Ciclo de vigilancia terminado ---\n");
 }
 
-// Ejecutamos el flujo
-main();
+// ============================================================================
+// ⏰ PILOTO AUTOMÁTICO (CRON JOB)
+// ============================================================================
+
+console.log("🕒 Inicializando el programador de tareas (Cron)...");
+
+// El formato cron es: Minuto Hora DíaMes Mes DíaSemana
+// '0 9 * * *' significa: En el minuto 0, de la hora 9, todos los días.
+const job = new CronJob(
+    '0 9 * * *', 
+    async function() {
+        console.log(`\n⏰ [${new Date().toLocaleTimeString()}] Despertando al trabajador para su ronda diaria...`);
+        await main();
+    },
+    null, // Función a ejecutar cuando termina (null)
+    true, // Iniciar el temporizador inmediatamente
+    'America/Santiago' // Configuramos la zona horaria a Chile para que respete tu reloj local y no el del servidor (UTC)
+);
+
+console.log("✅ Piloto automático activado. El scraper revisará las webs todos los días a las 09:00 AM.");
