@@ -122,3 +122,68 @@ def wishlist_details(item_id: int = typer.Argument(..., help="ID del lanzamiento
             f"🔗 Link de compra: [blue underline]{item.get('buy_url')}[/blue underline]\n")
     except Exception as e:
         console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
+
+
+@wishlist_app.command(name="clear")
+def clear_wishlist():
+    """Elimina TODOS los libros del tablón de deseos (Limpieza masiva)."""
+    try:
+        response = httpx.get(API_WISHLIST)
+        items = response.json()
+
+        if not items:
+            console.print("[yellow]El tablón ya está vacío.[/yellow]")
+            return
+
+        # Borramos uno por uno rápidamente
+        for item in items:
+            httpx.delete(f"{API_WISHLIST}{item['id']}/")
+
+        console.print(
+            f"[bold green]✅ Se han eliminado {len(items)} libros del tablón de deseos.[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
+
+
+@wishlist_app.command(name="watchers")
+def list_watchers():
+    """Muestra todas las palabras clave que el bot está vigilando actualmente."""
+    # Usamos la variable global API_WATCHERS (".../watchers-crud/") automáticamente
+    try:
+        response = httpx.get(API_WATCHERS)
+        watchers = response.json()
+
+        if not watchers:
+            console.print(
+                "[yellow]No hay palabras clave vigiladas en este momento.[/yellow]")
+            return
+
+        table = Table(
+            title="👁️ [bold cyan]Palabras Vigiladas (Scraper)[/bold cyan]", box=box.ROUNDED)
+        table.add_column("ID", justify="right", style="dim")
+        table.add_column("Palabra Clave", style="green")
+        table.add_column("Creado", style="cyan")
+
+        for w in watchers:
+            # Acortamos la fecha de "2026-03-18T10:00..." a "2026-03-18"
+            table.add_row(str(w.get('id', '')), w.get(
+                'keyword', ''), str(w.get('created_at', ''))[:10])
+
+        console.print(table)
+    except Exception as e:
+        console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
+
+
+@wishlist_app.command(name="unwatch")
+def unwatch_keyword(watcher_id: int):
+    """Deja de vigilar una palabra clave usando su ID."""
+    try:
+        response = httpx.delete(f"{API_WATCHERS}{watcher_id}/")
+        if response.status_code == 204:
+            console.print(
+                f"[bold green]✅ Palabra clave #{watcher_id} eliminada del radar.[/bold green]")
+        else:
+            console.print(
+                f"[bold red]❌ No se pudo eliminar. ¿Existe el ID {watcher_id}?[/bold red]")
+    except Exception as e:
+        console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
