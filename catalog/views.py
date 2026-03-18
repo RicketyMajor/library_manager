@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Book, Author, Genre, Watcher, WishlistItem
 from django.shortcuts import render
+from rest_framework import viewsets
+from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer
 
 # Importamos la herramienta que creamos para el CLI
 from cli.api import fetch_book_by_isbn
@@ -121,3 +123,23 @@ def add_wishlist_item(request):
         "message": "✅ Nuevo lanzamiento añadido al tablón de deseos.",
         "id": item.id
     }, status=status.HTTP_201_CREATED)
+
+# --- ENDPOINTS PARA EL CLI EMANCIPADO ---
+
+
+class BookViewSet(viewsets.ModelViewSet):
+    """Provee operaciones CRUD automáticas para los libros de la biblioteca."""
+    queryset = Book.objects.all().order_by('-id')
+    serializer_class = BookSerializer
+
+
+class WatcherViewSet(viewsets.ModelViewSet):
+    """Provee operaciones CRUD para las palabras clave vigiladas."""
+    queryset = Watcher.objects.all().order_by('-created_at')
+    serializer_class = WatcherSerializer
+
+
+class WishlistItemViewSet(viewsets.ModelViewSet):
+    """Provee operaciones CRUD para el tablón de deseos."""
+    queryset = WishlistItem.objects.all().order_by('-date_found')
+    serializer_class = WishlistItemSerializer
