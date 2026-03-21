@@ -3,7 +3,7 @@ import httpx
 from rich.console import Console
 from rich.table import Table
 from rich import box
-from rich.prompt import Prompt
+from rich.prompt import Prompt, Confirm
 from datetime import datetime
 from rich.align import Align
 
@@ -50,6 +50,12 @@ def lend_book():
             "\n[bold yellow]Ingresa el ID del libro que vas a prestar[/bold yellow]")
         friend_name = Prompt.ask(
             "[bold yellow]¿A quién se lo vas a prestar?[/bold yellow]")
+
+        # 🛡️ BARRERA UX
+        if not Confirm.ask(f"\n¿Confirmas que entregarás este libro a {friend_name}?"):
+            console.print(
+                "\n[yellow]Préstamo cancelado. El libro sigue en tu estantería.[/yellow]\n")
+            return
 
         # 4. Lógica de Amigos (Buscar o Crear)
         friends_resp = httpx.get(API_FRIENDS)
@@ -130,6 +136,12 @@ def list_loans():
 @loan_app.command(name="return")
 def return_book(loan_id: int = typer.Argument(..., help="ID del préstamo a devolver")):
     """Devuelve un libro prestado a tu biblioteca física."""
+
+    # 🛡️ BARRERA UX
+    if not Confirm.ask(f"¿Confirmas que el préstamo #{loan_id} ya está físicamente de vuelta en tu estantería?"):
+        console.print("\n[yellow]Devolución cancelada.[/yellow]\n")
+        return
+
     try:
         # 1. Obtenemos el préstamo para saber qué libro debemos devolver
         resp = httpx.get(f"{API_LOANS}{loan_id}/")

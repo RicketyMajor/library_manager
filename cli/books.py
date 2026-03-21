@@ -11,6 +11,7 @@ from rich.text import Text
 # 🎨 Añadimos Group y Align para el ensamblaje maestro
 from rich.console import Group
 from rich.align import Align
+from cli.api import fetch_book_by_isbn
 import json
 
 console = Console()
@@ -153,29 +154,64 @@ def add_book_wizard():
         return
 
     # ---------------------------------------------------------
-    # OPCIÓN 2: ISBN MANUAL (El flujo que ya tenías)
+    # OPCIÓN 2: ISBN MANUAL (Con Vista Previa y Confirmación)
     # ---------------------------------------------------------
     elif choice == "2":
         isbn = Prompt.ask(
             "\n[bold yellow]🔢 Ingresa el código ISBN[/bold yellow]")
-        console.print(
-            f"Buscando los registros globales para el ISBN {isbn}...")
+        console.print(f"Consultando registros globales para {isbn}...")
+
         try:
+            # 1. Obtenemos la vista previa usando nuestra propia herramienta del CLI
+            preview = fetch_book_by_isbn(isbn)
+
+            if not preview:
+                console.print(
+                    f"[bold red]❌ Libro con ISBN {isbn} no encontrado en los registros de OpenLibrary.[/bold red]")
+                return
+
+            # 2. Mostramos la tarjeta de confirmación con diseño geométrico
+            preview_text = Text()
+            preview_text.append(f"❖ Título: ", style="bold white")
+            preview_text.append(
+                f"{preview.get('title', 'Desconocido')}\n", style="cyan")
+            preview_text.append(f"✎ Autor: ", style="bold white")
+            preview_text.append(
+                f"{preview.get('author', 'Desconocido')}\n", style="yellow")
+            preview_text.append(f"◷ Publicación: ", style="bold white")
+            preview_text.append(
+                f"{preview.get('publish_date', '-')}\n", style="green")
+            preview_text.append(f"▤ Páginas: ", style="bold white")
+            preview_text.append(
+                f"{preview.get('page_count', '-')}", style="magenta")
+
+            console.print()
+            console.print(Panel(
+                preview_text, title="[bold magenta]Vista Previa del Libro[/bold magenta]", border_style="magenta", expand=False))
+
+            # 3. 🛡️ BARRERA UX
+            if not Confirm.ask("¿Deseas registrar permanentemente este libro en tu biblioteca?"):
+                console.print(
+                    "\n[yellow]Operación cancelada. El libro no fue guardado.[/yellow]\n")
+                return
+
+            # 4. Si aprueba, disparamos la petición a nuestra API para que lo guarde oficialmente
             response = httpx.post(API_SCAN, json={"isbn": isbn})
             data = response.json()
 
             if response.status_code == 201:
                 console.print(
-                    f"[bold green]✅ {data.get('message', 'Añadido')}[/bold green] (ID: {data['book']['id']})")
+                    f"\n[bold green]✅ {data.get('message', 'Añadido')}[/bold green] (ID: {data['book']['id']})")
             elif response.status_code == 200:
                 console.print(
-                    f"[yellow]⚠️ {data.get('message', 'Ya existe')}[/yellow]")
+                    f"\n[yellow]⚠️ {data.get('message', 'Ya existe')}[/yellow]")
             else:
                 console.print(
-                    f"[bold red]❌ Error: {data.get('error', 'Desconocido')}[/bold red]")
+                    f"\n[bold red]❌ Error: {data.get('error', 'Desconocido')}[/bold red]")
+
         except Exception as e:
             console.print(
-                f"[bold red]❌ Error de conexión al servidor: {e}[/bold red]")
+                f"\n[bold red]❌ Error de conexión al servidor: {e}[/bold red]")
 
     # ---------------------------------------------------------
     # OPCIÓN 3: INGRESO 100% MANUAL (Polimorfismo en acción)
@@ -243,14 +279,20 @@ def add_book_wizard():
 @book_app.command(name="delete")
 def delete_book(book_id: int):
     """Elimina un libro de la biblioteca mediante la API."""
+
+    # 🛡️ BARRERA UX
+    if not Confirm.ask(f"¿Estás seguro de que deseas eliminar permanentemente el libro #{book_id}?"):
+        console.print("\n[yellow]Operación cancelada.[/yellow]\n")
+        return
+
     try:
         response = httpx.delete(f"{API_LIBRARY}{book_id}/")
         if response.status_code == 204:
             console.print(
-                f"[bold green]✅ Libro #{book_id} eliminado correctamente del servidor.[/bold green]")
+                f"\n[bold green]✅ Libro #{book_id} eliminado correctamente del servidor.[/bold green]\n")
         else:
             console.print(
-                f"[bold red]❌ No se pudo eliminar. ¿Existe el ID {book_id}?[/bold red]")
+                f"\n[bold red]❌ No se pudo eliminar. ¿Existe el ID {book_id}?[/bold red]\n")
     except Exception as e:
         console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
 
@@ -276,15 +318,14 @@ def book_details(book_id: int = typer.Argument(..., help="ID del libro")):
 
         author = book.get('author_name')
         if author:
-            # Usamos el glifo clásico de lápiz
             title_text.append(f"\n✎  {author}", style="bold yellow")
 
+        # 🚀 COMPRESIÓN: padding vertical a 0
         header_panel = Panel(title_text, box=box.HEAVY,
-                             border_style="cyan", padding=(1, 4))
+                             border_style="cyan", padding=(0, 4))
 
         # --- 2. COLUMNA IZQUIERDA: Ficha Técnica y Estado ---
         tech_text = Text(justify="center")
-        # Reemplazamos los emojis por glifos geométricos de terminal
         tech_text.append(f"❖ Editorial: ", style="bold white")
         tech_text.append(f"{book.get('publisher') or '-'}\n", style="yellow")
         tech_text.append(f"◈ Formato: ", style="bold white")
@@ -292,8 +333,10 @@ def book_details(book_id: int = typer.Argument(..., help="ID del libro")):
             f"{book.get('format_type') or '-'}\n", style="magenta")
         tech_text.append(f"◷ Publicación: ", style="bold white")
         tech_text.append(f"{book.get('publish_date') or '-'}\n", style="green")
+
+        # 🚀 COMPRESIÓN: Quitamos el \n extra que había aquí
         tech_text.append(f"▤ Páginas: ", style="bold white")
-        tech_text.append(f"{book.get('page_count') or '-'}\n\n", style="cyan")
+        tech_text.append(f"{book.get('page_count') or '-'}\n", style="cyan")
 
         tech_text.append("► Estado Físico ◄\n", style="bold underline white")
         tech_text.append(
@@ -306,10 +349,11 @@ def book_details(book_id: int = typer.Argument(..., help="ID del libro")):
             tech_text.append("  ⌖ Ubicación: ", style="bold")
             tech_text.append("En Estantería", style="bold green")
 
+        # 🚀 COMPRESIÓN: padding vertical a 0
         tech_panel = Panel(
-            tech_text, title="[bold cyan]Ficha Técnica[/bold cyan]", border_style="cyan", padding=(1, 2))
+            tech_text, title="[bold cyan]Ficha Técnica[/bold cyan]", border_style="cyan", padding=(0, 2))
 
-        # --- 3. COLUMNA DERECHA: Polimorfismo (Detalles Específicos) ---
+        # --- 3. COLUMNA DERECHA: Detalles y Sinopsis ---
         details = book.get('details', {})
         details_panel = None
         if details:
@@ -322,34 +366,36 @@ def book_details(book_id: int = typer.Argument(..., help="ID del libro")):
                 det_text.append(f"{value}\n", style="green")
 
             details_panel = Panel(
-                det_text, title="[bold magenta]Detalles Especiales[/bold magenta]", border_style="magenta", padding=(1, 2))
+                det_text, title="[bold magenta]Detalles[/bold magenta]", border_style="magenta", padding=(0, 2))
 
-        # --- 4. SINOPSIS (Cuerpo Inferior) ---
         desc = book.get('description')
         synopsis_panel = None
         if desc:
-            if len(desc) > 800:
-                desc = desc[:800] + "..."
+            # 🚀 COMPRESIÓN: Reducimos a 350 caracteres máximos para no estirar la columna
+            if len(desc) > 350:
+                desc = desc[:350] + "..."
             synopsis_panel = Panel(Text(desc, justify="center", style="dim"),
-                                   title="[bold yellow]Sinopsis[/bold yellow]", border_style="yellow", padding=(1, 4))
+                                   title="[bold yellow]Sinopsis[/bold yellow]", border_style="yellow", padding=(0, 2))
 
-        # --- 5. EL ENSAMBLAJE FINAL (Magia de Layout) ---
-        console.print()
+        # --- 4. EL ENSAMBLAJE FINAL ---
 
-        # Preparamos las columnas si existen detalles
-        middle_section = Columns(
-            [tech_panel, details_panel], equal=True) if details_panel else tech_panel
+        # Apilamos detalles arriba y sinopsis abajo en el mismo bloque derecho
+        right_items = []
+        if details_panel:
+            right_items.append(details_panel)
+        if synopsis_panel:
+            right_items.append(synopsis_panel)
 
-        # Agrupamos todo en un solo bloque renderizable
-        render_group = Group(
-            header_panel,
-            middle_section,
-            synopsis_panel if synopsis_panel else Text("")
-        )
+        if right_items:
+            right_column = Group(*right_items)
+            middle_section = Columns([tech_panel, right_column], equal=True)
+        else:
+            middle_section = tech_panel
 
-        # 🚀 LA SOLUCIÓN AL ESPACIO: Restringimos a 90 caracteres y centramos todo
+        render_group = Group(header_panel, middle_section)
+
+        # 🚀 COMPRESIÓN: Eliminamos los saltos de línea (console.print()) antes y después
         console.print(Align.center(render_group, width=90))
-        console.print()
 
     except Exception as e:
         console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")

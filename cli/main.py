@@ -3,6 +3,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.align import Align
 from rich.text import Text
+from rich.columns import Columns
 import click
 from click_repl import repl
 from prompt_toolkit.formatted_text import HTML
@@ -138,36 +139,41 @@ def show_welcome_screen():
     ascii_art = pyfiglet.figlet_format("LIBRARY", font="slant")
     ascii_text = Text(ascii_art, style="bold cyan")
 
-    # 🚀 Obtenemos los datos dinámicos
+    # Obtenemos los datos dinámicos
     local_ip = get_local_ip()
     stats = get_dashboard_stats()
 
-    welcome_text = f"""
-[dim]Tu ecosistema distribuido está en línea y operando.[/dim]
+    # 🚀 Panel Izquierdo: Sensores
+    left_text = f"""[bold white]► ESTADO DEL INVENTARIO ◄[/bold white]
+  ❖ Libros en colección: [bold green]{stats['books']}[/bold green]
+  ⇋ Préstamos activos: [bold yellow]{stats['loans']}[/bold yellow]
+  ★ Novedades en radar: [bold magenta]{stats['wishlist']}[/bold magenta]
 
-📊 [bold white]Estado del Inventario:[/bold white]
-  📚 Libros en colección: [bold green]{stats['books']}[/bold green]
-  🤝 Préstamos activos: [bold yellow]{stats['loans']}[/bold yellow]
-  ✨ Novedades en el radar: [bold magenta]{stats['wishlist']}[/bold magenta]
+[bold white]► ESCÁNER MÓVIL (WIFI) ◄[/bold white]
+  ⌖ [bold underline blue]http://{local_ip}:8000/scanner/[/bold underline blue]"""
 
-📱 [bold white]Escáner Móvil (Cámara):[/bold white]
-  👉 [bold underline blue]http://{local_ip}:8000/scanner/[/bold underline blue]
-  [dim](Abre este link en el navegador de tu celular conectado al mismo WiFi)[/dim]
+    # 🚀 Panel Derecho: Comandos
+    right_text = """[bold yellow]► MÓDULOS ACTIVOS ◄[/bold yellow]
+[green]▪[/green] [bold]book[/bold] (list, add, details, edit, delete)
+[green]▪[/green] [bold]loan[/bold] (list, lend, return)
+[green]▪[/green] [bold]wishlist[/bold] (list, watch, watchers, clear)
 
-[bold yellow]Módulos Principales:[/bold yellow]
-[green]▸[/green] [bold]book[/bold] (list, add, details, edit, delete)
-[green]▸[/green] [bold]loan[/bold] (list, lend, return)
-[green]▸[/green] [bold]wishlist[/bold] (list, watch, watchers, clear)
+[dim]Atajos del Sistema:[/dim]
+[dim]  Tab  = Autocompletar[/dim]
+[dim]  exit = Cerrar sesión[/dim]"""
 
-[dim]Presiona [bold]Tab[/bold] para autocompletar. Escribe [bold]exit[/bold] para salir.[/dim]
-    """
+    # Compresión vertical: padding de 0 arriba y abajo
+    left_panel = Panel(
+        left_text, title="[bold cyan]Métricas y Sensores[/bold cyan]", border_style="cyan", padding=(0, 2))
+    right_panel = Panel(
+        right_text, title="[bold magenta]Subsistemas[/bold magenta]", border_style="magenta", padding=(0, 2))
+
+    # Ensamblamos los paneles uno al lado del otro
+    dashboard = Columns([left_panel, right_panel], equal=True, expand=False)
 
     console.print(Align.center(ascii_text))
-    console.print(Align.center(
-        Panel(welcome_text, title="[bold magenta]Centro de Mando v1.0[/bold magenta]",
-              border_style="cyan", expand=False)
-    ))
-    console.print()
+    # Imprimimos el dashboard ensamblado sin saltos de línea extra
+    console.print(Align.center(dashboard))
 
 
 @app.command(name="shell")
