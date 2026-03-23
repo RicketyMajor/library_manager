@@ -20,6 +20,7 @@ class Genre(models.Model):
 
 class Book(models.Model):
     title = models.CharField(max_length=255)
+    isbn = models.CharField(max_length=20, unique=True, null=True, blank=True)
     subtitle = models.CharField(max_length=255, blank=True, null=True)
     author = models.ForeignKey(
         'Author', on_delete=models.CASCADE, related_name='books', null=True, blank=True)

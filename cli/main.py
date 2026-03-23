@@ -195,9 +195,9 @@ def show_scanner_qr():
         key_path = str(Path.home() / ".ssh" / "library_cli_key")
 
         tunnel_process = subprocess.Popen(
-            # 🚀 Añadimos '-i', key_path para usar SOLO esta identidad
-            ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no",
-                "-R", "80:localhost:8000", "nokey@localhost.run"],
+            # 🚀 Añadimos un Heartbeat cada 60 segundos para evitar que el túnel muera por inactividad
+            ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o",
+                "ServerAliveInterval=60", "-R", "80:localhost:8000", "nokey@localhost.run"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,

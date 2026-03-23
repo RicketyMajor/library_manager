@@ -14,43 +14,53 @@ from cli.api import fetch_book_by_isbn
 @api_view(['POST'])
 def scan_book(request):
     """
-    Recibe un ISBN mediante POST, busca en OpenLibrary y lo guarda en la base de datos.
+    Recibe un ISBN mediante POST, busca en nuestro Triple Gateway y lo guarda en la base de datos.
     """
     # 1. Extraemos el ISBN del JSON que envíe el teléfono
     isbn = request.data.get('isbn')
 
     if not isbn:
         return Response(
-            {"error": "Please provide an 'isbn' in the request body."},
+            {"error": "Falta proveer el 'isbn' en el cuerpo de la petición."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # 2. Usamos nuestra función mágica de la Fase 6
+    # 2. Usamos el Triple Gateway (Comic Vine -> Google -> OpenLibrary)
     book_data = fetch_book_by_isbn(isbn)
 
     if not book_data:
+        # 🚀 Corrección: Ahora el mensaje refleja la realidad de nuestra arquitectura distribuida
         return Response(
-            {"error": f"Book with ISBN {isbn} not found on OpenLibrary."},
+            {"error": f"ISBN {isbn} no encontrado en ninguna de las 3 bases de datos (Comic Vine, Google, OpenLibrary)."},
             status=status.HTTP_404_NOT_FOUND
         )
 
     # 3. Guardamos los datos en la base de datos
     author, _ = Author.objects.get_or_create(name=book_data['author'].strip())
 
-    # Prevenimos duplicados por si escaneas el mismo libro dos veces
-    if Book.objects.filter(title=book_data['title'].strip(), author=author).exists():
+    # 🛡️ Prevención matemática estricta por ISBN
+    if Book.objects.filter(isbn=isbn).exists():
         return Response(
-            {"message": f"'{book_data['title']}' is already in your library!"},
+            {"message": f"¡El tomo con ISBN {isbn} ya está registrado en tu biblioteca!"},
             status=status.HTTP_200_OK
         )
 
+    # 🚀 CEREBRO HEURÍSTICO: Detección automática de Cómics y Mangas
+    detected_format = 'NOVEL'  # Valor por defecto
+    categories_str = " ".join(book_data['categories']).lower()
+
+    if 'comic' in categories_str or 'manga' in categories_str or 'graphic novel' in categories_str:
+        detected_format = 'MANGA'
+
+    # 🚀 Inyectamos el ISBN aquí para que SE GUARDE en la base de datos
     book = Book.objects.create(
+        isbn=isbn,  # <-- ¡El eslabón perdido que solucionará los duplicados!
         title=book_data['title'].strip(),
         subtitle=book_data['subtitle'],
         author=author,
         publisher=book_data['publisher'],
-        format_type='NOVEL',  # Valor por defecto al escanear, luego lo puedes editar en el CLI
-        is_read=False,       # Valor por defecto
+        format_type=detected_format,  # <-- Asignación inteligente automática
+        is_read=False,
         page_count=book_data['page_count'] or None,
         publish_date=book_data['publish_date'],
         cover_url=book_data['cover_url'],
@@ -64,7 +74,7 @@ def scan_book(request):
 
     # 4. Respondemos con éxito al teléfono
     return Response({
-        "message": "✅ Book successfully added to library!",
+        "message": f"✅ ¡{detected_format} agregado con éxito a la biblioteca!",
         "book": {
             "id": book.id,
             "title": book.title,

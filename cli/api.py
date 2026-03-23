@@ -1,21 +1,112 @@
 import requests
 from typing import Dict, Optional
 from rich.console import Console
+import re
 
 console = Console()
 
+COMIC_VINE_KEY = "8db1d3de48158f3b4b5c2faadbb572818fddf245"
+HEADERS_CV = {"User-Agent": "LibraryManagerCLI/1.0 (Comic Scanner)"}
+GOOGLE_BOOKS_KEY = "AIzaSyCzDvJ63BXjqhyK21eU2uOgy9zbOdxCt1o"
 
-def fetch_book_by_isbn(isbn: str) -> Optional[Dict]:
-    url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
 
-    # 1. Añadimos un User-Agent. OpenLibrary pide esto para no bloquearte.
-    headers = {
-        "User-Agent": "LibraryManagerCLI/1.0 (Proyecto Universitario, contacto: alonso@localhost.com)"
-    }
+def fetch_from_comicvine(isbn: str) -> Optional[Dict]:
+    """Oracle 1: Comic Vine API (Especialista en Cómics y Mangas)"""
+    url = f"https://comicvine.gamespot.com/api/search/?api_key={COMIC_VINE_KEY}&format=json&resources=volume,issue&query={isbn}"
 
     try:
-        # 2. Aumentamos el timeout a 15 segundos y pasamos los headers
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=HEADERS_CV, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get("error") != "OK" or data.get("number_of_total_results", 0) == 0:
+            return None
+
+        comic = data.get("results", [])[0]
+        if not comic:
+            return None
+
+        # 🛡️ Programación Defensiva contra Nulos de Comic Vine
+        volume_data = comic.get("volume") or {}
+        title = comic.get("name") or volume_data.get("name") or "Unknown Comic"
+        issue_num = comic.get("issue_number") or ""
+
+        full_title = f"{title} #{issue_num}" if issue_num else title
+
+        publisher_data = comic.get("publisher") or {}
+        publisher = publisher_data.get("name") or ""
+
+        image_data = comic.get("image") or {}
+        cover_url = image_data.get("medium_url") or ""
+
+        description = comic.get("deck") or comic.get("description") or ""
+
+        if description:
+            description = re.sub('<[^<]+?>', '', description).strip()
+
+        return {
+            "title": full_title,
+            "subtitle": "",
+            "author": "Varios Autores (Cómic)",
+            "publisher": publisher,
+            "categories": ["Comics & Graphic Novels"],
+            "page_count": 0,
+            "publish_date": comic.get("cover_date", ""),
+            "cover_url": cover_url,
+            "description": description[:800] + "..." if len(description) > 800 else description,
+        }
+    except Exception as e:
+        console.print(
+            f"[dim yellow]⚠️ Comic Vine falló ({e}). Pasando a Google Books...[/dim yellow]")
+        return None
+
+
+def fetch_from_google_books(isbn: str) -> Optional[Dict]:
+    """Oracle 2: Google Books API (Primary Comercial)"""
+    # 🚀 Inyectamos la variable GOOGLE_BOOKS_KEY al final de la URL
+    url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}&key={GOOGLE_BOOKS_KEY}"
+
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        if "items" not in data or not data["items"]:
+            return None
+
+        volume_info = data["items"][0].get("volumeInfo") or {}
+
+        # 🛡️ Programación Defensiva contra Nulos de Google Books
+        authors = volume_info.get("authors") or ["Unknown Author"]
+        images = volume_info.get("imageLinks") or {}
+        cover_url = images.get("thumbnail") or ""
+        cover_url = cover_url.replace("http://", "https://")
+
+        categories = volume_info.get("categories") or []
+
+        return {
+            "title": volume_info.get("title", "Unknown Title"),
+            "subtitle": volume_info.get("subtitle", ""),
+            "author": authors[0] if authors else "Unknown Author",
+            "publisher": volume_info.get("publisher", ""),
+            "categories": categories[:3],
+            "page_count": volume_info.get("pageCount", 0),
+            "publish_date": volume_info.get("publishedDate", ""),
+            "cover_url": cover_url,
+            "description": volume_info.get("description", ""),
+        }
+    except Exception as e:
+        console.print(
+            f"[dim yellow]⚠️ Aviso: Falló Google Books ({e}). Intentando Fallback final...[/dim yellow]")
+        return None
+
+
+def fetch_from_openlibrary(isbn: str) -> Optional[Dict]:
+    """Oracle 3: OpenLibrary API (Rarezas y Antiguos)"""
+    url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
+    headers = {"User-Agent": "LibraryManagerCLI/1.0"}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
 
@@ -23,48 +114,48 @@ def fetch_book_by_isbn(isbn: str) -> Optional[Dict]:
         if key not in data:
             return None
 
-        book_info = data[key]
+        book = data[key]
 
-        authors = book_info.get("authors", [{"name": "Unknown Author"}])
-        publishers = book_info.get("publishers", [{"name": ""}])
-        subjects = book_info.get("subjects", [])
-
-        # Buscamos la descripción real primero
-        description_data = book_info.get("description", "")
-        if isinstance(description_data, dict):
-            description_data = description_data.get("value", "")
-
-        # Buscamos las notas como respaldo
-        notes_data = book_info.get("notes", "")
-        if isinstance(notes_data, dict):
-            notes_data = notes_data.get("value", "")
-
-        # Nos quedamos con la descripción si existe, sino usamos las notas
-        final_description = description_data.strip(
-        ) if description_data else notes_data.strip()
-
-        cover_info = book_info.get("cover", {})
-        cover_url = cover_info.get("large") or cover_info.get("medium") or ""
+        # 🛡️ Programación Defensiva en OpenLibrary
+        authors = book.get("authors") or [{"name": "Unknown Author"}]
+        publishers = book.get("publishers") or [{"name": ""}]
+        subjects = book.get("subjects") or []
+        cover_data = book.get("cover") or {}
 
         return {
-            "title": book_info.get("title", "Unknown Title"),
-            "subtitle": book_info.get("subtitle", ""),
-            "author": authors[0]["name"] if authors else "Unknown Author",
-            "publisher": publishers[0]["name"] if publishers else "",
-            "categories": [sub["name"] for sub in subjects[:3]],
-            "page_count": book_info.get("number_of_pages", 0),
-            "publish_date": book_info.get("publish_date", ""),
-            "cover_url": cover_url,
-            "description": final_description,  # Usamos nuestra nueva variable mejorada
+            "title": book.get("title", "Unknown Title"),
+            "subtitle": book.get("subtitle", ""),
+            "author": authors[0].get("name", "Unknown Author"),
+            "publisher": publishers[0].get("name", ""),
+            "categories": [sub.get("name", "") for sub in subjects[:3]],
+            "page_count": book.get("number_of_pages", 0),
+            "publish_date": book.get("publish_date", ""),
+            "cover_url": cover_data.get("large") or cover_data.get("medium") or "",
+            "description": "",
         }
-
-    except requests.exceptions.Timeout:
-        # Ahora sabremos si fue culpa del servidor por lentitud
-        console.print(
-            "[bold red]⚠️ El servidor de OpenLibrary tardó demasiado en responder (Timeout).[/bold red]")
-        return None
     except Exception as e:
-        # Ahora sabremos si nuestro código se rompió por un dato faltante que no previmos
-        console.print(
-            f"[bold red]⚠️ Error interno procesando el JSON: {e}[/bold red]")
         return None
+
+
+def fetch_book_by_isbn(isbn: str) -> Optional[Dict]:
+    """El Gateway Definitivo (Comic Vine -> Google Books -> OpenLibrary)"""
+    console.print(
+        f"[dim]Consultando Oracle 1 (Comic Vine) para ISBN {isbn}...[/dim]")
+    data = fetch_from_comicvine(isbn)
+    if data:
+        console.print("[dim green]✓ Encontrado en Comic Vine.[/dim green]")
+        return data
+
+    console.print(f"[dim]Consultando Oracle 2 (Google Books)...[/dim]")
+    data = fetch_from_google_books(isbn)
+    if data:
+        console.print("[dim green]✓ Encontrado en Google Books.[/dim green]")
+        return data
+
+    console.print(f"[dim]Consultando Oracle 3 (OpenLibrary)...[/dim]")
+    data = fetch_from_openlibrary(isbn)
+    if data:
+        console.print("[dim green]✓ Encontrado en OpenLibrary.[/dim green]")
+        return data
+
+    return None
