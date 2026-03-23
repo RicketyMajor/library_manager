@@ -31,6 +31,7 @@ class Book(models.Model):
     FORMAT_CHOICES = [
         ('NOVEL', 'Novela'),
         ('MANGA', 'Manga / Cómic'),
+        ('COMIC', 'Cómic Occidental'),
         ('ANTHOLOGY', 'Antología / Cuentos'),
         ('ACADEMIC', 'Libro Académico'),
     ]

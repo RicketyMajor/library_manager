@@ -291,15 +291,17 @@ def add_book_wizard():
         console.print("1. NOVEL (Novela estándar)")
         console.print("2. MANGA (Manga o Cómic)")
         console.print("3. ANTHOLOGY (Antología de cuentos)")
+        console.print("4. COMIC (Cómic Occidental)")
         fmt_choice = Prompt.ask("Elige el formato", choices=[
-                                "1", "2", "3"], default="1")
+                                "1", "2", "3", "4"], default="1")
 
-        format_map = {"1": "NOVEL", "2": "MANGA", "3": "ANTHOLOGY"}
+        format_map = {"1": "NOVEL", "2": "MANGA",
+                      "3": "ANTHOLOGY", "4": "COMIC"}
         format_type = format_map[fmt_choice]
 
         # 🚀 APROVECHANDO EL POLIMORFISMO (JSONB)
         details = {}
-        if format_type == "MANGA":
+        if format_type in ["MANGA", "COMIC"]:
             tomos = Prompt.ask(
                 "¿Cuántos tomos tiene en total esta obra?", default="Desconocido")
             details["tomos_totales"] = tomos
@@ -491,11 +493,11 @@ def edit_book(book_id: int = typer.Argument(..., help="ID del libro a editar")):
         elif read_prompt.lower() in ['n', 'no']:
             payload['is_read'] = False
 
-        # Editamos el formato si OpenLibrary lo clasificó mal (ej. clasificó un manga como novela)
+        # Editamos el formato si OpenLibrary lo clasificó mal
         current_format = book.get('format_type', 'NOVEL')
         console.print(f"\nFormato actual: [cyan]{current_format}[/cyan]")
         new_format = Prompt.ask(
-            "Nuevo formato (1=NOVEL, 2=MANGA, 3=ANTHOLOGY, ENTER para saltar)", default="")
+            "Nuevo formato (1=NOVEL, 2=MANGA, 3=ANTHOLOGY, 4=COMIC, ENTER para saltar)", default="")
 
         if new_format == "1":
             payload['format_type'] = "NOVEL"
@@ -503,12 +505,14 @@ def edit_book(book_id: int = typer.Argument(..., help="ID del libro a editar")):
             payload['format_type'] = "MANGA"
         elif new_format == "3":
             payload['format_type'] = "ANTHOLOGY"
+        elif new_format == "4":
+            payload['format_type'] = "COMIC"  # 🚀 Mapeo de la nueva opción
 
         # 3. Lógica para inyectar detalles (Polimorfismo Retroactivo)
-        # Si cambiamos el formato a MANGA, o si ya era MANGA y queremos actualizar los tomos
         final_format = payload.get('format_type', current_format)
 
-        if final_format == "MANGA":
+        # 🚀 Aplicamos la lógica de tomos también a COMIC
+        if final_format in ["MANGA", "COMIC"]:
             if Confirm.ask("\n¿Deseas actualizar los datos de los tomos?"):
                 details = book.get('details', {})
                 tomos_totales = Prompt.ask("Tomos totales", default=str(
@@ -564,7 +568,9 @@ def consolidate_mangas():
         for book in all_books:
             base_title, tomo = parse_manga_title(book['title'])
             if tomo:
-                base_key = base_title.lower()
+                # 🚀 LÓGICA DE PARTICIONAMIENTO: Agrupamos por Título Y Formato
+                base_key = (base_title.lower(), book.get('format_type'))
+
                 if base_key not in sagas:
                     sagas[base_key] = []
                 sagas[base_key].append((book, tomo))
@@ -572,10 +578,14 @@ def consolidate_mangas():
         fusion_count = 0
 
         # 2. Fase de Transformación y Carga (ETL)
-        for base_key, tomos_detectados in sagas.items():
-            # Buscamos si el usuario ya había creado manualmente la saga Master
+        # 🚀 Desempaquetamos correctamente la tupla del diccionario
+        for base_key_tuple, tomos_detectados in sagas.items():
+            base_key_name = base_key_tuple[0]    # Ej: "batman"
+            base_key_format = base_key_tuple[1]  # Ej: "COMIC"
+
+            # Buscamos si el usuario ya había creado manualmente la saga Master para ese formato
             posibles_masters = [b for b in all_books if b['title'].lower(
-            ) == base_key and b.get('format_type') == 'MANGA']
+            ) == base_key_name and b.get('format_type') == base_key_format]
 
             if posibles_masters:
                 master = posibles_masters[0]
@@ -593,8 +603,9 @@ def consolidate_mangas():
                 console.print(
                     f"[dim]Promoviendo '{master['title']}' a Master Saga...[/dim]")
                 httpx.patch(
-                    f"{API_LIBRARY}{master['id']}/", json={"title": base_key.title(), "format_type": "MANGA"})
-                master['title'] = base_key.title()
+                    # 🚀 Usamos el nombre y formato extraídos de la tupla
+                    f"{API_LIBRARY}{master['id']}/", json={"title": base_key_name.title(), "format_type": base_key_format})
+                master['title'] = base_key_name.title()
                 master_details = {}
             else:
                 continue  # Es solo 1 tomo suelto y no hay master, lo ignoramos

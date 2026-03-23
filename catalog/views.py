@@ -45,21 +45,27 @@ def scan_book(request):
             status=status.HTTP_200_OK
         )
 
-    # 🚀 CEREBRO HEURÍSTICO: Detección automática de Cómics y Mangas
+    # 🚀 CEREBRO HEURÍSTICO: Detección Automática Multi-Formato
     detected_format = 'NOVEL'  # Valor por defecto
     categories_str = " ".join(book_data['categories']).lower()
+    title_str = book_data['title'].lower()
+    desc_str = book_data['description'].lower()
 
-    if 'comic' in categories_str or 'manga' in categories_str or 'graphic novel' in categories_str:
+    # Sistema de triage heurístico
+    if 'manga' in categories_str or 'manga' in title_str:
         detected_format = 'MANGA'
+    elif any(kw in categories_str for kw in ['comic', 'graphic novel', 'superhero']):
+        detected_format = 'COMIC'
+    elif any(kw in categories_str + desc_str for kw in ['anthology', 'short stories', 'cuentos', 'antología']):
+        detected_format = 'ANTHOLOGY'
 
-    # 🚀 Inyectamos el ISBN aquí para que SE GUARDE en la base de datos
     book = Book.objects.create(
-        isbn=isbn,  # <-- ¡El eslabón perdido que solucionará los duplicados!
+        isbn=isbn,
         title=book_data['title'].strip(),
         subtitle=book_data['subtitle'],
         author=author,
         publisher=book_data['publisher'],
-        format_type=detected_format,  # <-- Asignación inteligente automática
+        format_type=detected_format,  # <-- Asignación quirúrgica
         is_read=False,
         page_count=book_data['page_count'] or None,
         publish_date=book_data['publish_date'],
