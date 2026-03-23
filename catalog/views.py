@@ -1,10 +1,12 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan
+from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan, ReadingSession, AnnualRecord
 from django.shortcuts import render
+from django.utils import timezone
+from django.db.models import Sum
 from rest_framework import viewsets
-from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer, FriendSerializer, LoanSerializer
+from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer, FriendSerializer, LoanSerializer, AnnualRecordSerializer
 import django_filters
 
 # Importamos la herramienta que creamos para el CLI
@@ -188,3 +190,84 @@ class LoanViewSet(viewsets.ModelViewSet):
     """Provee operaciones CRUD para los préstamos."""
     queryset = Loan.objects.all().order_by('-loan_date')
     serializer_class = LoanSerializer
+
+
+@api_view(['POST'])
+def log_pages(request):
+    """Registra páginas leídas en el libro mayor (Ledger)"""
+    pages = request.data.get('pages', 0)
+    try:
+        pages = int(pages)
+        if pages <= 0:
+            return Response({"error": "La cantidad de páginas debe ser mayor a 0"}, status=400)
+
+        # Simplemente añadimos un evento al registro
+        ReadingSession.objects.create(pages_read=pages)
+        return Response({"message": f"✅ {pages} páginas registradas exitosamente para hoy."}, status=201)
+    except ValueError:
+        return Response({"error": "Valor numérico inválido"}, status=400)
+
+
+@api_view(['POST'])
+def finish_book(request):
+    """Registra un libro terminado y actualiza la estantería si es propio"""
+    title = request.data.get('title')
+    author_name = request.data.get('author_name', 'Desconocido')
+    book_id = request.data.get('book_id')  # Puede venir vacío si es externo
+    is_owned = request.data.get('is_owned', False)
+
+    if not title:
+        return Response({"error": "El título es obligatorio"}, status=400)
+
+    # 1. Creamos el registro histórico
+    AnnualRecord.objects.create(
+        title=title,
+        author_name=author_name,
+        book_id=book_id,
+        is_owned=is_owned
+    )
+
+    # 2. Si el libro nos pertenece, lo marcamos como leído en la base de datos central
+    if book_id and is_owned:
+        try:
+            book = Book.objects.get(id=book_id)
+            if not book.is_read:
+                book.is_read = True
+                book.save()
+        except Book.DoesNotExist:
+            pass
+
+    return Response({"message": f"✅ ¡Felicidades! '{title}' añadido a tu registro anual."}, status=201)
+
+
+@api_view(['GET'])
+def tracker_stats(request):
+    """Calcula las métricas dinámicas del mes actual para el Centro de Mando"""
+    now = timezone.now()
+
+    # 1. Sumamos las páginas, filtrando solo por el año y mes actuales
+    mes_actual_sessions = ReadingSession.objects.filter(
+        date__year=now.year, date__month=now.month)
+    paginas_mes = mes_actual_sessions.aggregate(
+        Sum('pages_read'))['pages_read__sum'] or 0
+
+    # 2. Contamos los libros terminados este mes
+    libros_mes = AnnualRecord.objects.filter(
+        date_finished__year=now.year, date_finished__month=now.month).count()
+
+    return Response({
+        "pages_this_month": paginas_mes,
+        "books_this_month": libros_mes,
+        "current_month": now.strftime("%B").capitalize(),  # Ej: "Marzo"
+        "current_year": now.year
+    }, status=200)
+
+
+class AnnualRecordViewSet(viewsets.ModelViewSet):
+    """Devuelve la lista de libros leídos (filtrada siempre por el año actual)"""
+    serializer_class = AnnualRecordSerializer
+
+    def get_queryset(self):
+        now = timezone.now()
+        # El "reset" anual: solo devolvemos los registros de este año
+        return AnnualRecord.objects.filter(date_finished__year=now.year).order_by('-date_finished')

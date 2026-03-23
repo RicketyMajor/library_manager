@@ -108,3 +108,28 @@ class WishlistItem(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class ReadingSession(models.Model):
+    """Libro mayor de páginas leídas por día (Event Sourcing)"""
+    date = models.DateField(default=timezone.now)
+    pages_read = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"{self.date}: {self.pages_read} páginas"
+
+
+class AnnualRecord(models.Model):
+    """Registro histórico inmutable de libros terminados"""
+    title = models.CharField(max_length=255)
+    author_name = models.CharField(max_length=200, blank=True, null=True)
+
+    # Relación opcional: Si es None, significa que el libro no está en tu DB (era prestado/externo)
+    book = models.ForeignKey(Book, on_delete=models.SET_NULL,
+                             null=True, blank=True, related_name='read_records')
+
+    is_owned = models.BooleanField(default=True)
+    date_finished = models.DateField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.title} - Terminado el {self.date_finished}"
