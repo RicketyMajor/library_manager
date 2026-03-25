@@ -24,6 +24,7 @@ from cli.books import book_app
 from cli.loans import loan_app
 from cli.wishlist import wishlist_app
 from cli.tracker import tracker_app
+from cli.directories import dir_app
 
 console = Console()
 app = typer.Typer(
@@ -33,7 +34,7 @@ app.add_typer(book_app, name="book")
 app.add_typer(loan_app, name="loan")
 app.add_typer(wishlist_app, name="wishlist")
 app.add_typer(tracker_app, name="tracker")
-
+app.add_typer(dir_app, name="dir")
 
 # 🚀 1. Memoria de Estado: Esta variable recordará si ya revisamos la red
 _infrastructure_checked = False
@@ -197,6 +198,7 @@ def show_welcome_screen():
 
     # 🚀 4. Panel de Módulos (Con atajos extra)
     mod_text = """[green]▪[/green] [bold]book[/bold]    (list, add, details...)
+[green]▪[/green] [bold]dir[/bold]     (create, list, add)
 [green]▪[/green] [bold]loan[/bold]    (list, lend, return)
 [green]▪[/green] [bold]tracker[/bold] (log, finish, annual)"""
 
