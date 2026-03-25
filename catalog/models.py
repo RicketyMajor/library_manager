@@ -26,6 +26,8 @@ class Book(models.Model):
         'Author', on_delete=models.CASCADE, related_name='books', null=True, blank=True)
     genres = models.ManyToManyField('Genre', related_name='books', blank=True)
     publisher = models.CharField(max_length=255, blank=True, null=True)
+    directory = models.ForeignKey(
+        'Directory', on_delete=models.SET_NULL, related_name='books', null=True, blank=True)
 
     # Formato principal para clasificar
     FORMAT_CHOICES = [
@@ -76,6 +78,17 @@ class Loan(models.Model):
 
     def __str__(self):
         return f"{self.book.title} -> {self.friend.name}"
+
+
+class Directory(models.Model):
+    """Carpetas maestras para agrupar libros o sagas (El Sistema de Archivos)."""
+    name = models.CharField(max_length=100, unique=True)
+    color_hex = models.CharField(
+        max_length=20, default="cyan", help_text="Color de renderizado en la terminal")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
 
 
 # --- SISTEMA DE VIGILANCIA Y LISTA DE DESEOS ---

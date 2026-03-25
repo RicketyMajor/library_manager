@@ -14,6 +14,7 @@ router.register(r'friends', views.FriendViewSet, basename='friends')
 router.register(r'loans', views.LoanViewSet, basename='loans')
 router.register(r'tracker/annual', AnnualRecordViewSet,
                 basename='tracker-annual')
+router.register(r'directories', views.DirectoryViewSet, basename='directories')
 
 urlpatterns = [
     # Tus endpoints antiguos siguen funcionando intactos

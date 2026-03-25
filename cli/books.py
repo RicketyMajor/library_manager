@@ -1,19 +1,20 @@
 import typer
 import re
 import httpx
+import json
 from rich.console import Console
 from rich.table import Table
 from rich import box
 from rich.prompt import Prompt, Confirm
-# 🎨 Añadimos las herramientas de maquetación avanzada
 from rich.panel import Panel
 from rich.columns import Columns
 from rich.text import Text
-# 🎨 Añadimos Group y Align para el ensamblaje maestro
 from rich.console import Group
 from rich.align import Align
 from cli.api import fetch_book_by_isbn
-import json
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import WordCompleter
+
 
 console = Console()
 book_app = typer.Typer(
@@ -292,11 +293,12 @@ def add_book_wizard():
         console.print("2. MANGA (Manga o Cómic)")
         console.print("3. ANTHOLOGY (Antología de cuentos)")
         console.print("4. COMIC (Cómic Occidental)")
+        console.print("5. ACADEMIC (Libro Académico)")
         fmt_choice = Prompt.ask("Elige el formato", choices=[
-                                "1", "2", "3", "4"], default="1")
+                                "1", "2", "3", "4", "5"], default="1")
 
         format_map = {"1": "NOVEL", "2": "MANGA",
-                      "3": "ANTHOLOGY", "4": "COMIC"}
+                      "3": "ANTHOLOGY", "4": "COMIC", "5": "ACADEMIC"}
         format_type = format_map[fmt_choice]
 
         # 🚀 APROVECHANDO EL POLIMORFISMO (JSONB)
@@ -466,9 +468,8 @@ def book_details(book_id: int = typer.Argument(..., help="ID del libro")):
 
 @book_app.command(name="edit")
 def edit_book(book_id: int = typer.Argument(..., help="ID del libro a editar")):
-    """Modifica rápidamente el estado de lectura, formato o añade metadatos polimórficos a un libro existente."""
+    """Modifica atributos del libro mediante un menú interactivo en bucle."""
     try:
-        # 1. Obtenemos el libro actual
         response = httpx.get(f"{API_LIBRARY}{book_id}/")
         if response.status_code == 404:
             console.print(
@@ -476,80 +477,128 @@ def edit_book(book_id: int = typer.Argument(..., help="ID del libro a editar")):
             return
 
         book = response.json()
-        console.print(
-            f"\n✏️  [bold yellow]Editando: {book.get('title')}[/bold yellow]")
-        console.print(
-            "[dim]Presiona ENTER para mantener el valor actual.[/dim]\n")
-
-        # 2. Preparamos el payload con los datos existentes
         payload = {}
 
-        # Editamos el estado de lectura
-        current_read = book.get('is_read', False)
-        read_prompt = Prompt.ask(
-            f"¿Ya está leído? [y/n] (Actual: {'y' if current_read else 'n'})", default="")
-        if read_prompt.lower() in ['y', 'yes', 's', 'si']:
-            payload['is_read'] = True
-        elif read_prompt.lower() in ['n', 'no']:
-            payload['is_read'] = False
+        # 🚀 Autocompletador Dinámico
+        format_completer = WordCompleter(
+            ['NOVEL', 'MANGA', 'COMIC', 'ANTHOLOGY', 'ACADEMIC'], ignore_case=True)
 
-        # Editamos el formato si OpenLibrary lo clasificó mal
-        current_format = book.get('format_type', 'NOVEL')
-        console.print(f"\nFormato actual: [cyan]{current_format}[/cyan]")
-        new_format = Prompt.ask(
-            "Nuevo formato (1=NOVEL, 2=MANGA, 3=ANTHOLOGY, 4=COMIC, ENTER para saltar)", default="")
+        while True:
+            # 🧹 Limpiamos la pantalla sutilmente para UX fluida (Opcional, puedes quitarlo si prefieres ver el historial)
+            console.print(
+                f"\n[bold cyan]✏️ Editando Ficha #{book_id}: {book.get('title', 'Sin título')}[/bold cyan]")
 
-        if new_format == "1":
-            payload['format_type'] = "NOVEL"
-        elif new_format == "2":
-            payload['format_type'] = "MANGA"
-        elif new_format == "3":
-            payload['format_type'] = "ANTHOLOGY"
-        elif new_format == "4":
-            payload['format_type'] = "COMIC"  # 🚀 Mapeo de la nueva opción
+            # Tabla de estado actual
+            table = Table(box=box.SIMPLE_HEAVY, header_style="bold yellow")
+            table.add_column("Opción")
+            table.add_column("Campo", style="bold white")
+            table.add_column("Valor Actual", style="dim")
 
-        # 3. Lógica para inyectar detalles (Polimorfismo Retroactivo)
-        final_format = payload.get('format_type', current_format)
+            table.add_row("1", "Título", book.get('title', '-'))
+            table.add_row("2", "Subtítulo", book.get('subtitle', '-'))
+            table.add_row("3", "Autor", book.get('author_name', '-'))
+            table.add_row("4", "Formato", book.get('format_type', '-'))
+            table.add_row("5", "Páginas", str(book.get('page_count', '-')))
+            table.add_row("6", "Leído", "Sí" if book.get('is_read') else "No")
+            table.add_row("7", "Detalles (Tomos/Cuentos)",
+                          str(book.get('details', '-')))
+            table.add_row(
+                "0", "[bold green]Guardar Cambios y Salir[/bold green]", "")
 
-        # 🚀 Aplicamos la lógica de tomos también a COMIC
-        if final_format in ["MANGA", "COMIC"]:
-            if Confirm.ask("\n¿Deseas actualizar los datos de los tomos?"):
-                details = book.get('details', {})
-                tomos_totales = Prompt.ask("Tomos totales", default=str(
-                    details.get('tomos_totales', '')))
-                tomos_obtenidos = Prompt.ask("Tomos en tu colección (ej. 1,2,3)", default=str(
-                    details.get('tomos_obtenidos', '')))
+            console.print(table)
 
-                details['tomos_totales'] = tomos_totales
-                details['tomos_obtenidos'] = tomos_obtenidos
-                payload['details'] = details
+            choice = Prompt.ask("Selecciona el número a editar", choices=[
+                                str(i) for i in range(8)], default="0")
 
-        elif final_format == "ANTHOLOGY":
-            if Confirm.ask("\n¿Deseas actualizar la lista de cuentos?"):
-                details = book.get('details', {})
-                current_cuentos = ", ".join(details.get('lista_cuentos', []))
-                cuentos = Prompt.ask(
-                    "Nombra los cuentos (separados por coma)", default=current_cuentos)
+            if choice == "0":
+                break
+            elif choice == "1":
+                val = Prompt.ask("Nuevo Título", default=book.get('title', ''))
+                payload['title'] = val
+                book['title'] = val
+            elif choice == "2":
+                val = Prompt.ask("Nuevo Subtítulo",
+                                 default=book.get('subtitle', ''))
+                payload['subtitle'] = val
+                book['subtitle'] = val
+            elif choice == "3":
+                val = Prompt.ask(
+                    "Nuevo Autor", default=book.get('author_name', ''))
+                payload['author_input'] = val
+                book['author_name'] = val
+            elif choice == "4":
+                console.print(
+                    "[dim]Opciones permitidas: NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC[/dim]")
+                val = prompt("Formato (Usa TAB para autocompletar): ",
+                             completer=format_completer).strip().upper()
 
-                details["lista_cuentos"] = [c.strip()
-                                            for c in cuentos.split(",") if c.strip()]
-                payload['details'] = details
+                if val in ['NOVEL', 'MANGA', 'COMIC', 'ANTHOLOGY', 'ACADEMIC']:
+                    payload['format_type'] = val
+                    book['format_type'] = val
 
-        # 4. Enviamos la actualización usando el método PATCH (modificación parcial)
+                    # 🚀 Mutación Polimórfica Inmediata
+                    if val in ["MANGA", "COMIC"]:
+                        if Confirm.ask("¿Actualizar registro de tomos?"):
+                            details = payload.get(
+                                'details', book.get('details', {}))
+                            details['tomos_totales'] = Prompt.ask(
+                                "Tomos totales de la obra", default=str(details.get('tomos_totales', '')))
+                            details['tomos_obtenidos'] = Prompt.ask(
+                                "Tomos en colección (ej. 1,2,3)", default=str(details.get('tomos_obtenidos', '')))
+                            payload['details'] = details
+                            book['details'] = details
+                    elif val == "ANTHOLOGY":
+                        if Confirm.ask("¿Actualizar lista de cuentos incluidos?"):
+                            details = payload.get(
+                                'details', book.get('details', {}))
+                            cuentos_str = ", ".join(
+                                details.get('lista_cuentos', []))
+                            val_c = Prompt.ask(
+                                "Cuentos (separados por coma)", default=cuentos_str)
+                            details['lista_cuentos'] = [c.strip()
+                                                        for c in val_c.split(",") if c.strip()]
+                            payload['details'] = details
+                            book['details'] = details
+                    elif val == "ACADEMIC":
+                        if Confirm.ask("¿Añadir asignatura o área de estudio?"):
+                            details = payload.get(
+                                'details', book.get('details', {}))
+                            details['asignatura'] = Prompt.ask(
+                                "Asignatura", default=str(details.get('asignatura', '')))
+                            payload['details'] = details
+                            book['details'] = details
+                else:
+                    console.print("[red]❌ Formato no válido.[/red]")
+            elif choice == "5":
+                val = Prompt.ask("Cantidad de páginas",
+                                 default=str(book.get('page_count', '')))
+                if val.isdigit():
+                    payload['page_count'] = int(val)
+                    book['page_count'] = int(val)
+            elif choice == "6":
+                val = Confirm.ask(
+                    "¿Marcar libro como completado/leído?", default=book.get('is_read', False))
+                payload['is_read'] = val
+                book['is_read'] = val
+            elif choice == "7":
+                console.print(
+                    "[dim]⚠️ Los detalles se actualizan automáticamente al cambiar el Formato (Opción 4).[/dim]")
+
+        # 4. Impacto en la Base de Datos al salir del bucle
         if payload:
             update_response = httpx.patch(
                 f"{API_LIBRARY}{book_id}/", json=payload)
             if update_response.status_code == 200:
                 console.print(
-                    "\n[bold green]✅ Libro actualizado correctamente en la base de datos.[/bold green]\n")
+                    "\n[bold green]✅ Ficha del libro actualizada magistralmente.[/bold green]\n")
             else:
                 console.print(
                     f"\n[bold red]❌ Error al actualizar: {update_response.text}[/bold red]\n")
         else:
-            console.print("\n[yellow]No se realizaron cambios.[/yellow]\n")
+            console.print("\n[dim]Saliendo sin guardar cambios.[/dim]\n")
 
     except Exception as e:
-        console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
+        console.print(f"[bold red]❌ Error de red: {e}[/bold red]")
 
 
 @book_app.command(name="consolidate")

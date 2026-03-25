@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan
+from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan, Directory
 from .models import AnnualRecord
 
 
@@ -58,4 +58,10 @@ class LoanSerializer(serializers.ModelSerializer):
 class AnnualRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnnualRecord
+        fields = '__all__'
+
+
+class DirectorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Directory
         fields = '__all__'

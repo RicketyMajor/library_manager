@@ -1,12 +1,12 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan, ReadingSession, AnnualRecord
+from .models import Book, Author, Genre, Watcher, WishlistItem, Friend, Loan, ReadingSession, AnnualRecord, Directory
 from django.shortcuts import render
 from django.utils import timezone
 from django.db.models import Sum
 from rest_framework import viewsets
-from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer, FriendSerializer, LoanSerializer, AnnualRecordSerializer
+from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializer, FriendSerializer, LoanSerializer, AnnualRecordSerializer, DirectorySerializer
 import django_filters
 
 # Importamos la herramienta que creamos para el CLI
@@ -271,3 +271,11 @@ class AnnualRecordViewSet(viewsets.ModelViewSet):
         now = timezone.now()
         # El "reset" anual: solo devolvemos los registros de este año
         return AnnualRecord.objects.filter(date_finished__year=now.year).order_by('-date_finished')
+
+# Asegúrate de importar Directory y DirectorySerializer en la parte superior
+
+
+class DirectoryViewSet(viewsets.ModelViewSet):
+    """Provee operaciones CRUD para los directorios del Sistema de Archivos."""
+    queryset = Directory.objects.all().order_by('name')
+    serializer_class = DirectorySerializer
