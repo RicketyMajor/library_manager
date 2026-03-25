@@ -5,7 +5,7 @@ module.exports = {
     name: 'Penguin Libros (Debolsillo)',
     scrape: async function() {
         const releases = [];
-        const targetUrl = 'https://www.penguinlibros.com/cl/13-novedades';
+        const targetUrl = 'https://www.penguinlibros.com/cl/content/1045-novedades-del-mes';
         try {
             const response = await axios.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
             const $ = cheerio.load(response.data);
