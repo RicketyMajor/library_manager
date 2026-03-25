@@ -74,6 +74,9 @@ def list_books(
     if read is not None:
         params['is_read'] = "true" if read else "false"
 
+    # 🚀 VFS: Detectamos si es una búsqueda global o una vista de raíz
+    is_search = bool(params)
+
     try:
         # httpx convertirá el diccionario 'params' mágicamente en ?author=X&title=Y
         response = httpx.get(API_LIBRARY, params=params)
@@ -86,6 +89,10 @@ def list_books(
             "http://localhost:8000/api/books/directories/", timeout=2.0)
         if dir_resp.status_code == 200:
             dir_map = {d['id']: d for d in dir_resp.json()}
+
+        # 🚀 LÓGICA DE VFS: Ocultamos los libros anidados si estamos en la "raíz" (sin filtros)
+        if not is_search:
+            books = [b for b in books if b.get('directory') is None]
 
     except Exception as e:
         console.print(f"[bold red]❌ Error de conexión: {e}[/bold red]")
@@ -109,56 +116,59 @@ def list_books(
     table.add_column("Título", style="bold white")
     table.add_column("Autor", style="yellow")
     table.add_column("Formato", style="magenta")
-    table.add_column("Directorio", justify="center")
+    table.add_column("Editorial", style="green")
+
+    # 🚀 VFS: Solo mostramos la columna de Directorio si estamos haciendo una búsqueda global
+    if is_search:
+        table.add_column("Directorio", justify="center")
+
     table.add_column("Leído", justify="center")
     table.add_column("Ubicación", justify="center")
 
     for book in books:
-        # Glifos monocromáticos inyectados con color puro
         status = "[green]✔[/green]" if book.get('is_read') else "[red]✘[/red]"
         ubicacion = "[bold red]⇋ Prestado[/bold red]" if book.get(
             'is_loaned') else "[bold green]❖ Estantería[/bold green]"
 
-        # 🚀 LÓGICA DEL TÍTULO EN ÁRBOL (Subtítulos dinámicos)
         title_display = book.get('title', 'Sin título').upper()
         details = book.get('details', {})
         format_type = book.get('format_type', 'NOVEL')
 
-        # 🚀 CORRECCIÓN: Si es Manga o Cómic, calculamos la cantidad de tomos obtenidos
         if format_type in ["MANGA", "COMIC"] and details:
             tomos_raw = details.get('tomos_obtenidos', '')
             if tomos_raw:
-                # Contamos los tomos separando por comas
                 cantidad_tomos = len(
                     [t for t in str(tomos_raw).split(',') if t.strip()])
                 title_display += f"\n  [dim]↳ {cantidad_tomos} tomos en colección[/dim]"
-
-        # Si es Antología, contamos la longitud de la lista de cuentos
         elif format_type == "ANTHOLOGY" and details:
             cuentos = details.get('lista_cuentos', [])
             if cuentos:
                 title_display += f"\n  [dim]↳ {len(cuentos)} cuentos incluidos[/dim]"
 
-        # 🚀 LÓGICA DE DIRECTORIOS: Pintamos la etiqueta de la carpeta
-        dir_id = book.get('directory')
-        if dir_id and dir_id in dir_map:
-            d_info = dir_map[dir_id]
-            dir_display = f"[{d_info['color_hex']}]■ {d_info['name']}[/{d_info['color_hex']}]"
-        else:
-            dir_display = "[dim]---[/dim]"
-
-        table.add_row(
+        # 🚀 Construimos la fila base
+        row_data = [
             str(book.get('id')),
             title_display,
             book.get('author_name', 'Desconocido'),
             book.get('format_type', '-'),
-            dir_display,  # 🚀 Insertamos el directorio aquí
-            status,
-            ubicacion
-        )
+            book.get('publisher') or '-'
+        ]
+
+        # Si es una búsqueda, inyectamos la columna dinámica del Directorio
+        if is_search:
+            dir_id = book.get('directory')
+            if dir_id and dir_id in dir_map:
+                d_info = dir_map[dir_id]
+                dir_display = f"[{d_info['color_hex']}]■ {d_info['name']}[/{d_info['color_hex']}]"
+            else:
+                dir_display = "[dim]---[/dim]"
+            row_data.append(dir_display)
+
+        # Añadimos los estados finales
+        row_data.extend([status, ubicacion])
+        table.add_row(*row_data)
 
     console.print()
-    # Centramos la tabla en la pantalla
     console.print(Align.center(table))
     console.print()
 

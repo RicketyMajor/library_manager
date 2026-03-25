@@ -193,7 +193,7 @@ def show_welcome_screen():
 
     # 🚀 3. Panel de Comandos Rápidos
     cmd_text = """[cyan]⌘[/cyan] Escanear QR:    [bold cyan]scanner[/bold cyan]
-[green]🌳[/green] Ver Universos:  [bold cyan]tree[/bold cyan]
+[green]▤[/green] Explorar Raíz: [bold cyan]ls[/bold cyan]
 [green]✎[/green] Anotar páginas: [bold cyan]tracker log <#>[/bold cyan]
 [magenta]✔[/magenta] Registrar obra: [bold cyan]tracker finish[/bold cyan]"""
 
@@ -297,6 +297,72 @@ def show_scanner_qr():
     if tunnel_process:
         console.print("[dim]Destruyendo túnel efímero...[/dim]")
         tunnel_process.terminate()
+
+
+@app.command(name="ls")
+def list_structure():
+    """Muestra la estructura unificada de la raíz (Directorios + Libros Huérfanos)."""
+    try:
+        books_resp = httpx.get("http://localhost:8000/api/books/library/")
+        dirs_resp = httpx.get("http://localhost:8000/api/books/directories/")
+        books_resp.raise_for_status()
+        dirs_resp.raise_for_status()
+
+        all_books = books_resp.json()
+        all_dirs = dirs_resp.json()
+    except Exception as e:
+        console.print(f"[bold red]❌ Error de red: {e}[/bold red]")
+        return
+
+    # Filtramos solo los libros que están en la raíz (sin directorio)
+    orphan_books = [b for b in all_books if b.get('directory') is None]
+
+    if not all_dirs and not orphan_books:
+        console.print(
+            "\n[yellow]Tu biblioteca está completamente vacía.[/yellow]\n")
+        return
+
+    from rich.table import Table
+    from rich import box
+
+    table = Table(title="🗄️ [bold cyan]SISTEMA DE ARCHIVOS (RAÍZ)[/bold cyan] 🗄️",
+                  box=box.SIMPLE_HEAVY, header_style="bold cyan")
+    table.add_column("ID", justify="right", style="dim", no_wrap=True)
+    table.add_column("Nombre / Título", style="bold white")
+    table.add_column("Autor / Detalles", style="yellow")
+    table.add_column("Formato", style="magenta", justify="center")
+    table.add_column("Estado", justify="center")
+
+    # 1. Imprimimos primero las carpetas (Directorios)
+    for d in all_dirs:
+        d_id = d['id']
+        color = d.get('color_hex', 'cyan')
+        name = d.get('name', 'Unknown')
+        count = sum(1 for b in all_books if b.get('directory') == d_id)
+
+        table.add_row(
+            f"[D-{d_id}]",
+            f"[{color}]📁 {name.upper()}[/{color}]",
+            f"[dim]Contiene {count} obras anidadas[/dim]",
+            f"[{color}]DIRECTORIO[/{color}]",
+            "-"
+        )
+
+    # 2. Imprimimos luego los archivos sueltos (Libros)
+    for b in orphan_books:
+        status = "[green]✔ Leído[/green]" if b.get(
+            'is_read') else "[red]✘ Pendiente[/red]"
+        table.add_row(
+            str(b.get('id')),
+            b.get('title', 'Sin título'),
+            b.get('author_name', 'Desconocido'),
+            b.get('format_type', '-'),
+            status
+        )
+
+    console.print()
+    console.print(Align.center(table))
+    console.print()
 
 
 @app.command(name="tree")

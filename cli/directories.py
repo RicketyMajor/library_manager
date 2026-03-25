@@ -218,17 +218,22 @@ def view_dir(dir_id: int = typer.Argument(..., help="ID numérico del directorio
             f"\n[{color}]■ Directorio '{name}' está vacío.[/_{color}]\n")
         return
 
-    # Renderizamos la tabla idéntica a book list
+   # Renderizamos la tabla con todas las columnas estándar
     table = Table(title=f"[{color}]■ CONTENIDO DE: {name.upper()}[/{color}]",
                   box=box.SIMPLE_HEAVY, header_style=f"bold {color}", border_style=color)
     table.add_column("ID", justify="right", style="dim", no_wrap=True)
     table.add_column("Título", style="bold white")
     table.add_column("Autor", style="yellow")
     table.add_column("Formato", style="magenta")
+    table.add_column("Editorial", style="green")  # 🚀 Nueva columna
     table.add_column("Leído", justify="center")
+    table.add_column("Ubicación", justify="center")  # 🚀 Nueva columna
 
     for book in dir_books:
         status = "[green]✔[/green]" if book.get('is_read') else "[red]✘[/red]"
+        ubicacion = "[bold red]⇋ Prestado[/bold red]" if book.get(
+            # 🚀 Lógica de ubicación
+            'is_loaned') else "[bold green]❖ Estantería[/bold green]"
 
         title_display = book.get('title', 'Sin título').upper()
         details = book.get('details', {})
@@ -250,7 +255,9 @@ def view_dir(dir_id: int = typer.Argument(..., help="ID numérico del directorio
             title_display,
             book.get('author_name', 'Desconocido'),
             fmt,
-            status
+            book.get('publisher') or '-',  # 🚀 Render de editorial
+            status,
+            ubicacion  # 🚀 Render de ubicación
         )
 
     console.print()
