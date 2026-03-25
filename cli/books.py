@@ -124,8 +124,8 @@ def list_books(
         details = book.get('details', {})
         format_type = book.get('format_type', 'NOVEL')
 
-        # Si es Manga, calculamos la cantidad de tomos obtenidos
-        if format_type == "MANGA" and details:
+        # 🚀 CORRECCIÓN: Si es Manga o Cómic, calculamos la cantidad de tomos obtenidos
+        if format_type in ["MANGA", "COMIC"] and details:
             tomos_raw = details.get('tomos_obtenidos', '')
             if tomos_raw:
                 # Contamos los tomos separando por comas
