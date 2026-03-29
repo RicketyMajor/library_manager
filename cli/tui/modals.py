@@ -129,14 +129,14 @@ class SyncConsoleModal(ModalScreen[None]):
         project_dir = Path(__file__).resolve().parent.parent.parent
 
         try:
-            # 🚀 Magia Asíncrona: Lanzamos Docker sin congelar la interfaz
+            # Lanza Docker sin congelar la interfaz
             process = await asyncio.create_subprocess_exec(
                 "docker-compose", "run", "--rm", "scraper",
                 cwd=str(project_dir),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
-            # Creamos un hilo de fondo que lee la salida de Node.js línea por línea
+            # Crea un hilo de fondo que lee la salida de Node.js línea por línea
             asyncio.create_task(self.read_output(process, log))
         except Exception as e:
             log.write(f"[bold red]Error iniciando el sabueso: {e}[/bold red]")
@@ -191,3 +191,24 @@ class LogPagesModal(ModalScreen[int]):
             self.dismiss(int(val) if val.isdigit() else None)
         else:
             self.dismiss(None)
+
+
+class ConfirmModal(ModalScreen[bool]):
+    """Diálogo de confirmación universal y peligroso."""
+
+    def __init__(self, prompt_text: str, **kwargs):
+        super().__init__(**kwargs)
+        self.prompt_text = prompt_text
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm_dialog"):
+            yield Label(self.prompt_text, classes="modal_title")
+            with Horizontal(classes="form_buttons"):
+                yield Button("Confirmar", variant="error", id="btn_confirm")
+                yield Button("Cancelar", variant="primary", id="btn_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_confirm":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)

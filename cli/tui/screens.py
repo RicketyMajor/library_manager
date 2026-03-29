@@ -13,7 +13,7 @@ class BookDetailsScreen(Screen):
         ("q", "app.quit", "Salir")
     ]
 
-    # 🚀 REVOLUCIÓN GRÁFICA: CSS Integrado en la Pantalla
+    # CSS Integrado en la Pantalla
     CSS = """
     #details_root { padding: 1 2; }
     
@@ -43,7 +43,7 @@ class BookDetailsScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        # 🚀 CONTENEDORES GRID
+        # CONTENEDORES GRID
         with VerticalScroll(id="details_root"):
             yield Markdown("Cargando...", id="header_panel")
             with Grid(id="details_grid"):
@@ -66,14 +66,14 @@ class BookDetailsScreen(Screen):
             pass
 
     def render_details(self, book: dict) -> None:
-        # 1. Cabecera (Centro)
+        # Cabecera (Centro)
         title = book.get('title', 'Sin Título').upper()
         subtitle = f"*{book.get('subtitle')}*" if book.get('subtitle') else ""
         author = book.get('author_name', 'Desconocido')
         self.query_one("#header_panel", Markdown).update(
             f"# {title}\n{subtitle}\n### ✎ {author}")
 
-        # 2. Ficha Técnica (Izquierda)
+        # Ficha Técnica (Izquierda)
         generos_str = ", ".join(book.get('genre_list', [])) if book.get(
             'genre_list') else "Sin clasificar"
         estado = "✔ Leído" if book.get('is_read') else "✘ Pendiente"
@@ -94,7 +94,7 @@ class BookDetailsScreen(Screen):
 """
         self.query_one("#tech_panel", Markdown).update(tech_md)
 
-        # 3. Sinopsis y Detalles Extra (Derecha)
+        # Sinopsis y Detalles Extra (Derecha)
         synopsis_md = ""
         details = book.get('details', {})
         if details:

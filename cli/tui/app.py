@@ -7,7 +7,7 @@ from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
 from .constants import *
 from .screens import BookDetailsScreen
-from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal
+from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal, ConfirmModal
 
 
 class NeoLibraryApp(App):
@@ -43,6 +43,7 @@ class NeoLibraryApp(App):
     BINDINGS = [
         ("q", "quit", "Salir"),
         ("ctrl+b", "toggle_sidebar", "Explorador"),
+        ("ctrl+t", "toggle_dark", "Tema"),
         ("1", "switch_tab('tab_library')", "Inv"),
         ("2", "switch_tab('tab_inbox')", "Inbox"),
         ("3", "switch_tab('tab_loans')", "Préstamos"),
@@ -91,7 +92,6 @@ class NeoLibraryApp(App):
         t_wishlist.zebra_stripes = True
         t_wishlist.add_columns("ID", "Título", "Editorial", "Precio", "Fecha")
 
-        # Configurar Tabla 6: Registro Anual (Hábitos)
         t_annual = self.query_one("#annual_table", DataTable)
         t_annual.cursor_type = "row"
         t_annual.zebra_stripes = True
@@ -437,7 +437,7 @@ class NeoLibraryApp(App):
             row_key = table.coordinate_to_cell_key(
                 table.cursor_coordinate).row_key.value
             if row_key:
-                # 🚀 Usamos la tabla para extraer el ISBN sin pedirlo de nuevo
+                # Se Usa la tabla para extraer el ISBN sin pedirlo de nuevo
                 isbn = table.get_row(row_key)[1]
                 self.notify(f"Procesando ISBN: {isbn}...")
                 self.process_inbox_item(row_key, isbn)
@@ -533,13 +533,98 @@ class NeoLibraryApp(App):
             if resp.status_code == 200:
                 url = resp.json().get('buy_url')
                 if url:
-                    # 🚀 Lanza el navegador de tu sistema operativo nativamente
+                    # Lanza el navegador de tu sistema operativo nativamente
                     webbrowser.open(url)
                     self.app.call_from_thread(
                         self.notify, "Abriendo enlace en tu navegador...")
                 else:
                     self.app.call_from_thread(
                         self.notify, "No hay enlace disponible.")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+# ================= MOTOR DE ELIMINACIÓN GLOBAL =================
+
+    def action_delete_book(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
+            return
+        table = self.query_one("#books_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            title = table.get_row(row_key)[1]
+            if row_key:
+                def check_delete(confirm: bool | None) -> None:
+                    if confirm:
+                        self.process_delete_book(row_key)
+                self.push_screen(ConfirmModal(
+                    f"¿Eliminar permanentemente '{title}'?"), check_delete)
+        except Exception:
+            self.notify("Selecciona un libro primero.", severity="warning")
+
+    @work(thread=True)
+    def process_delete_book(self, book_id: str) -> None:
+        try:
+            if httpx.delete(f"{API_LIBRARY}{book_id}/", timeout=5.0).status_code == 204:
+                self.app.call_from_thread(
+                    self.notify, "Libro borrado del servidor.", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    def action_delete_inbox(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_inbox":
+            return
+        table = self.query_one("#inbox_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            if row_key:
+                def check_delete(confirm: bool | None) -> None:
+                    if confirm:
+                        self.process_delete_inbox(row_key)
+                self.push_screen(ConfirmModal(
+                    "¿Descartar este escaneo defectuoso?"), check_delete)
+        except Exception:
+            self.notify("Selecciona un escaneo.", severity="warning")
+
+    @work(thread=True)
+    def process_delete_inbox(self, inbox_id: str) -> None:
+        try:
+            if httpx.delete(f"{API_INBOX}{inbox_id}/", timeout=5.0).status_code == 204:
+                self.app.call_from_thread(
+                    self.notify, "Escaneo descartado.", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    def action_delete_wishlist(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_wishlist":
+            return
+        table = self.query_one("#wishlist_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            if row_key:
+                def check_delete(confirm: bool | None) -> None:
+                    if confirm:
+                        self.process_delete_wishlist(row_key)
+                self.push_screen(ConfirmModal(
+                    "¿Añadir a la lista negra del scraper?"), check_delete)
+        except Exception:
+            self.notify("Selecciona un lanzamiento.", severity="warning")
+
+    @work(thread=True)
+    def process_delete_wishlist(self, item_id: str) -> None:
+        try:
+            # Usa PATCH para el Soft Delete
+            if httpx.patch(f"{API_WISHLIST}{item_id}/", json={"is_rejected": True}, timeout=5.0).status_code == 200:
+                self.app.call_from_thread(
+                    self.notify, "Lanzamiento oculto para siempre.", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
         except Exception as e:
             self.app.call_from_thread(
                 self.notify, f"Error: {e}", severity="error")

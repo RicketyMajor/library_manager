@@ -11,6 +11,7 @@ class InventoryTab(TabPane):
         ("d", "app.show_details", "Ver Detalles"),
         ("l", "app.lend_book", "Prestar a Amigo"),
         ("c", "app.create_dir", "Crear Carpeta"),
+        ("x", "app.delete_book", "Eliminar Ficha"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -21,6 +22,7 @@ class InboxTab(TabPane):
     """Pestaña 2: El Purgatorio."""
     BINDINGS = [
         ("enter", "app.process_inbox", "Procesar Escaneo"),
+        ("x", "app.delete_inbox", "Descartar Escaneo"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -44,7 +46,6 @@ class TrackerTab(TabPane):
     ]
 
     def compose(self) -> ComposeResult:
-        # 🚀 Anidamos el panel de stats y la tabla debajo
         with Vertical():
             yield Markdown("Cargando métricas del sistema...", id="tracker_content")
             yield DataTable(id="annual_table")
@@ -56,6 +57,7 @@ class WishlistTab(TabPane):
         ("s", "app.sync_scraper", "Sincronizar Scraper"),
         ("w", "app.add_watcher", "Vigilar Autor"),
         ("d", "app.wishlist_details", "Ver Enlace"),
+        ("x", "app.delete_wishlist", "Ocultar Lanzamiento"),
     ]
 
     def compose(self) -> ComposeResult:
