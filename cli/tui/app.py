@@ -1,7 +1,7 @@
 import httpx
 from textual.app import App, ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.widgets import Header, Footer, DataTable, Markdown, Input, Button, Label, TabbedContent, TabPane
+from textual.widgets import Header, Footer, DataTable, Markdown, Input, Button, Label, TabbedContent, TabPane, Tree
 from textual.containers import VerticalScroll, Vertical, Horizontal
 from textual import work
 
@@ -152,6 +152,8 @@ class QuickEditModal(ModalScreen[dict]):
 # ==============================================================================
 class NeoLibraryApp(App):
 
+    all_books = []
+
     CSS = """
     Screen { background: $surface-darken-1; }
     
@@ -160,6 +162,19 @@ class NeoLibraryApp(App):
     DataTable { height: 1fr; margin: 1 2; }
     
     #details_container { margin: 2 4; padding: 1 2; border: heavy $accent; background: $surface; }
+
+    /* Estilos del explorador lateral oculto */
+    #sidebar {
+        dock: left;
+        width: 35;
+        height: 100%;
+        background: $surface-darken-2;
+        border-right: vkey $background;
+        display: none; /* Oculto por defecto */
+    }
+    #sidebar.-visible {
+        display: block; /* Se muestra al presionar Ctrl+B */
+    }
     
     /* Estilos de los Modales Flotantes */
     IsbnModal, QuickEditModal { align: center middle; }
@@ -172,6 +187,7 @@ class NeoLibraryApp(App):
 
     BINDINGS = [
         ("q", "quit", "Salir"),
+        ("ctrl+b", "toggle_sidebar", "Explorador"),
         ("a", "add_book", "Añadir (ISBN)"),
         ("e", "edit_book", "Editar Ficha"),
         ("d", "show_details", "Ver Detalles"),
@@ -183,6 +199,7 @@ class NeoLibraryApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
+        yield Tree("📁 Raíz de la Biblioteca", id="sidebar")
         # Contenedor de Pestañas
         with TabbedContent(initial="tab_library", id="main_tabs"):
             with TabPane("▤ Inventario", id="tab_library"):
@@ -220,13 +237,16 @@ class NeoLibraryApp(App):
 
     @work(thread=True)
     def load_all_data(self) -> None:
-        """Carga todas las vistas de forma asíncrona y a prueba de balas."""
-        # 1. Cargar Libros
+        # 1. Cargar Libros y Directorios
         try:
             books = httpx.get(API_LIBRARY, timeout=5.0).json()
+            dirs = httpx.get(API_DIRECTORIES, timeout=5.0).json()
             if isinstance(books, list):
+                self.all_books = books
                 orphan = [b for b in books if b.get('directory') is None]
                 self.app.call_from_thread(self.populate_books, orphan)
+                self.app.call_from_thread(
+                    self.populate_tree, dirs)
         except Exception as e:
             self.app.call_from_thread(
                 self.notify, f"Error en Inventario: {e}", severity="error")
@@ -254,6 +274,25 @@ class NeoLibraryApp(App):
                 self.app.call_from_thread(self.populate_tracker, tracker)
         except Exception:
             pass
+
+    # Construye las ramas del árbol
+
+    def populate_tree(self, dirs: list) -> None:
+        tree = self.query_one("#sidebar", Tree)
+        tree.root.expand()
+        tree.root.data = "root"  # Etiqueta invisible para saber si clickeaste la raíz
+
+        # Esto elimina todas las ramas viejas pero mantiene la "Raíz" viva
+        tree.clear()
+
+        for d in dirs:
+            # Cuenta cuántos libros hay en esta carpeta usando nuestra caché
+            count = sum(1 for b in self.all_books if b.get(
+                'directory') == d['id'])
+            # Renderizado colorido estilo NERDTree
+            node_label = f"[{d.get('color_hex', 'cyan')}]■ {d['name']}[/] [dim]({count})[/dim]"
+            # El atributo 'data' almacena el ID real del directorio para el filtro
+            tree.root.add(node_label, data=d['id'])
 
     def populate_books(self, books: list) -> None:
         table = self.query_one("#books_table", DataTable)
@@ -399,3 +438,34 @@ class NeoLibraryApp(App):
         except Exception:
             self.app.call_from_thread(
                 self.notify, "Error de red.", severity="error")
+
+    # Mostrar/Ocultar barra lateral
+    def action_toggle_sidebar(self) -> None:
+        sidebar = self.query_one("#sidebar", Tree)
+        sidebar.toggle_class("-visible")
+        if sidebar.has_class("-visible"):
+            sidebar.focus()
+
+    # Al hacer clic en un Universo/Directorio
+    def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+        # Si el usuario hace doble clic para expandir la raíz, evitamos el error
+        if event.node.data is None:
+            return
+
+        dir_id = event.node.data
+
+        # Filtramos usando nuestra memoria caché ultrarrápida
+        if dir_id == "root":
+            filtered_books = [
+                b for b in self.all_books if b.get('directory') is None]
+            self.notify("Mostrando raíz (Archivos sin agrupar)")
+        else:
+            filtered_books = [
+                b for b in self.all_books if b.get('directory') == dir_id]
+            self.notify(f"Universo filtrado ({len(filtered_books)} obras)")
+
+        # Actualizamos la tabla
+        self.populate_books(filtered_books)
+
+        # Aseguramos que la pantalla cambie a la pestaña de Inventario
+        self.action_switch_tab("tab_library")
