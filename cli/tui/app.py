@@ -1,9 +1,8 @@
 import httpx
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, DataTable, Markdown, TabbedContent, TabPane, Tree
+from textual.widgets import Header, Footer, DataTable, Markdown, TabbedContent, Tree
+from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
-
-# 🚀 Importaciones Modulares
 from .constants import *
 from .screens import BookDetailsScreen
 from .modals import IsbnModal, QuickEditModal
@@ -42,21 +41,26 @@ class NeoLibraryApp(App):
         ("2", "switch_tab('tab_inbox')", "Inbox"),
         ("3", "switch_tab('tab_loans')", "Préstamos"),
         ("4", "switch_tab('tab_tracker')", "Hábitos"),
+        ("5", "switch_tab('tab_wishlist')", "Tablón"),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Tree("📁 Raíz de la Biblioteca", id="sidebar")
         with TabbedContent(initial="tab_library", id="main_tabs"):
-            with TabPane("▤ Inventario", id="tab_library"):
-                yield DataTable(id="books_table")
-            with TabPane("◈ Inbox", id="tab_inbox"):
-                yield DataTable(id="inbox_table")
-            with TabPane("⇋ Préstamos", id="tab_loans"):
-                yield DataTable(id="loans_table")
-            with TabPane("∑ Hábitos", id="tab_tracker"):
-                yield Markdown("Cargando métricas del sistema...", id="tracker_content")
+            yield InventoryTab("▤ Inventario", id="tab_library")
+            yield InboxTab("◈ Inbox", id="tab_inbox")
+            yield LoansTab("⇋ Préstamos", id="tab_loans")
+            yield TrackerTab("∑ Hábitos", id="tab_tracker")
+            yield WishlistTab("★ Tablón", id="tab_wishlist")
         yield Footer()
+
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        """Cambia el foco automáticamente al contenido de la pestaña activa para actualizar los Atajos del Footer."""
+        for widget in event.pane.query("*"):
+            if isinstance(widget, (DataTable, Markdown)):
+                widget.focus()
+                break
 
     def on_mount(self) -> None:
         t_books = self.query_one("#books_table", DataTable)
@@ -75,6 +79,11 @@ class NeoLibraryApp(App):
         t_loans.zebra_stripes = True
         t_loans.add_columns("Libro", "Amigo", "Fecha Préstamo",
                             "Vencimiento", "Devuelto")
+
+        t_wishlist = self.query_one("#wishlist_table", DataTable)
+        t_wishlist.cursor_type = "row"
+        t_wishlist.zebra_stripes = True
+        t_wishlist.add_columns("ID", "Título", "Editorial", "Precio", "Fecha")
 
         self.load_all_data()
 
@@ -112,6 +121,24 @@ class NeoLibraryApp(App):
                 self.app.call_from_thread(self.populate_tracker, tracker)
         except Exception:
             pass
+
+        try:
+            wishlist = httpx.get(API_WISHLIST, timeout=5.0).json()
+            if isinstance(wishlist, list):
+                self.app.call_from_thread(self.populate_wishlist, wishlist)
+        except Exception:
+            pass
+
+    def populate_wishlist(self, items: list) -> None:
+        table = self.query_one("#wishlist_table", DataTable)
+        table.clear()
+        for item in items:
+            date_str = item.get('date_found', '')[:10]
+            table.add_row(
+                str(item.get('id')), item.get('title', '').upper(),
+                item.get('publisher') or "-", item.get('price') or "-",
+                date_str, key=str(item.get('id'))
+            )
 
     def populate_tree(self, dirs: list) -> None:
         tree = self.query_one("#sidebar", Tree)
@@ -275,3 +302,27 @@ class NeoLibraryApp(App):
             self.notify(f"Universo filtrado ({len(filtered_books)} obras)")
         self.populate_books(filtered_books)
         self.action_switch_tab("tab_library")
+
+    def action_process_inbox(self): self.notify(
+        "Próximamente: Procesar Escaneos (Fase 47)")
+
+    def action_lend_book(self): self.notify(
+        "Próximamente: Prestar Libro (Fase 47)")
+
+    def action_return_book(self): self.notify(
+        "Próximamente: Devolver Libro (Fase 47)")
+
+    def action_log_pages(self): self.notify(
+        "Próximamente: Anotar Páginas (Fase 47)")
+
+    def action_finish_book(self): self.notify(
+        "Próximamente: Registrar Terminado (Fase 47)")
+
+    def action_sync_scraper(self): self.notify(
+        "Próximamente: Despertar Scraper (Fase 48)")
+
+    def action_add_watcher(self): self.notify(
+        "Próximamente: Vigilar Autor (Fase 48)")
+
+    def action_wishlist_details(self): self.notify(
+        "Próximamente: Enlace Wishlist (Fase 48)")
