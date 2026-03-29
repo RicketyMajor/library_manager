@@ -1,12 +1,13 @@
 import httpx
+import datetime
+import webbrowser
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, DataTable, Markdown, TabbedContent, Tree
 from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
 from .constants import *
 from .screens import BookDetailsScreen
-import datetime
-from .modals import IsbnModal, FullEditModal, LendModal, DirModal
+from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal
 
 
 class NeoLibraryApp(App):
@@ -34,6 +35,9 @@ class NeoLibraryApp(App):
     Button { margin: 0 1; }
     #tracker_content { height: auto; margin: 1 2; padding: 0 1; border-left: thick $success; background: $surface; }
     #annual_table { height: 1fr; margin: 0 2 1 2; }
+    #sync_dialog { width: 80%; height: 80%; padding: 1 2; border: heavy $success; background: $surface; }
+    #watcher_dialog, #pages_dialog { width: 40; height: 15; padding: 1 2; border: heavy $accent; background: $surface; }
+    #sync_log { height: 1fr; border: solid $primary; background: #0c0c0c; }
     """
 
     BINDINGS = [
@@ -338,9 +342,6 @@ class NeoLibraryApp(App):
         self.populate_books(filtered_books)
         self.action_switch_tab("tab_library")
 
-    def action_process_inbox(self): self.notify(
-        "Próximamente: Procesar Escaneos (Fase 47)")
-
     # ================= PRÉSTAMOS =================
     def action_lend_book(self) -> None:
         if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
@@ -427,17 +428,118 @@ class NeoLibraryApp(App):
             self.app.call_from_thread(
                 self.notify, f"Error: {e}", severity="error")
 
-    def action_log_pages(self): self.notify(
-        "Próximamente: Anotar Páginas (Fase 47)")
+# ================= INBOX =================
+    def action_process_inbox(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_inbox":
+            return
+        table = self.query_one("#inbox_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            if row_key:
+                # 🚀 Usamos la tabla para extraer el ISBN sin pedirlo de nuevo
+                isbn = table.get_row(row_key)[1]
+                self.notify(f"Procesando ISBN: {isbn}...")
+                self.process_inbox_item(row_key, isbn)
+        except Exception:
+            self.notify("Selecciona un escaneo de la tabla.",
+                        severity="warning")
 
-    def action_finish_book(self): self.notify(
-        "Próximamente: Registrar Terminado (Fase 47)")
+    @work(thread=True)
+    def process_inbox_item(self, inbox_id: str, isbn: str) -> None:
+        try:
+            resp = httpx.post(API_SCAN, json={"isbn": isbn}, timeout=10.0)
+            if resp.status_code in [200, 201]:
+                httpx.delete(f"{API_INBOX}{inbox_id}/", timeout=5.0)
+                self.app.call_from_thread(
+                    self.notify, "¡Procesado y guardado en Inventario!", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+            else:
+                self.app.call_from_thread(
+                    self.notify, f"Error: {resp.json().get('error')}", severity="error")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
 
-    def action_sync_scraper(self): self.notify(
-        "Próximamente: Despertar Scraper (Fase 48)")
+    # ================= TRACKER =================
+    def action_log_pages(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_tracker":
+            return
 
-    def action_add_watcher(self): self.notify(
-        "Próximamente: Vigilar Autor (Fase 48)")
+        def do_log(pages: int | None) -> None:
+            if pages:
+                self.process_log_pages(pages)
+        self.push_screen(LogPagesModal(), do_log)
 
-    def action_wishlist_details(self): self.notify(
-        "Próximamente: Enlace Wishlist (Fase 48)")
+    @work(thread=True)
+    def process_log_pages(self, pages: int) -> None:
+        try:
+            if httpx.post(API_TRACKER_PAGES, json={"pages": pages}, timeout=5.0).status_code == 201:
+                self.app.call_from_thread(
+                    self.notify, f"{pages} páginas anotadas.", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    def action_finish_book(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_tracker":
+            return
+        self.notify(
+            "Para finalizar un libro, edita su ficha (tecla E) en el Inventario y marca 'Leído'.", severity="info")
+
+    # ================= WISHLIST & SCRAPER =================
+    def action_sync_scraper(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_wishlist":
+            return
+        # 🚀 Abre la consola de Matrix
+        self.push_screen(SyncConsoleModal())
+
+    def action_add_watcher(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_wishlist":
+            return
+
+        def do_watch(keyword: str | None) -> None:
+            if keyword:
+                self.process_add_watcher(keyword)
+        self.push_screen(WatcherModal(), do_watch)
+
+    @work(thread=True)
+    def process_add_watcher(self, keyword: str) -> None:
+        try:
+            if httpx.post(API_WATCHERS, json={"keyword": keyword, "is_active": True}, timeout=5.0).status_code == 201:
+                self.app.call_from_thread(
+                    self.notify, f"Vigilando: {keyword}", title="Scraper")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    def action_wishlist_details(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_wishlist":
+            return
+        table = self.query_one("#wishlist_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            if row_key:
+                self.process_wishlist_link(row_key)
+        except Exception:
+            self.notify("Selecciona un lanzamiento.", severity="warning")
+
+    @work(thread=True)
+    def process_wishlist_link(self, item_id: str) -> None:
+        try:
+            resp = httpx.get(f"{API_WISHLIST}{item_id}/", timeout=5.0)
+            if resp.status_code == 200:
+                url = resp.json().get('buy_url')
+                if url:
+                    # 🚀 Lanza el navegador de tu sistema operativo nativamente
+                    webbrowser.open(url)
+                    self.app.call_from_thread(
+                        self.notify, "Abriendo enlace en tu navegador...")
+                else:
+                    self.app.call_from_thread(
+                        self.notify, "No hay enlace disponible.")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")

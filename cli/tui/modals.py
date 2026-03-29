@@ -1,7 +1,9 @@
+import asyncio
 from textual.app import ComposeResult
 from textual.screen import ModalScreen
-from textual.widgets import Input, Button, Label, Checkbox
+from textual.widgets import Input, Button, Label, Checkbox, RichLog
 from textual.containers import Vertical, Horizontal, VerticalScroll
+from pathlib import Path
 
 
 class IsbnModal(ModalScreen[str]):
@@ -105,5 +107,87 @@ class DirModal(ModalScreen[dict]):
                 "name": self.query_one("#inp_dirname", Input).value,
                 "color_hex": self.query_one("#inp_dircolor", Input).value
             })
+        else:
+            self.dismiss(None)
+
+
+class SyncConsoleModal(ModalScreen[None]):
+    """La Terminal de Matrix: Ejecuta el Scraper Dockerizado en vivo."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="sync_dialog"):
+            yield Label("👾 Matrix Scraper Network", classes="modal_title")
+            # RichLog es un widget especializado en recibir texto de terminal
+            yield RichLog(id="sync_log", highlight=True, markup=True)
+            yield Button("Cerrar Conexión", variant="error", id="btn_cancel")
+
+    async def on_mount(self) -> None:
+        log = self.query_one("#sync_log", RichLog)
+        log.write("[bold cyan]Iniciando rastreo web distribuido...[/bold cyan]")
+
+        # Retrocedemos 3 carpetas (cli/tui/modals.py -> cli/tui -> cli -> raiz)
+        project_dir = Path(__file__).resolve().parent.parent.parent
+
+        try:
+            # 🚀 Magia Asíncrona: Lanzamos Docker sin congelar la interfaz
+            process = await asyncio.create_subprocess_exec(
+                "docker-compose", "run", "--rm", "scraper",
+                cwd=str(project_dir),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            # Creamos un hilo de fondo que lee la salida de Node.js línea por línea
+            asyncio.create_task(self.read_output(process, log))
+        except Exception as e:
+            log.write(f"[bold red]Error iniciando el sabueso: {e}[/bold red]")
+
+    async def read_output(self, process, log):
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            # Escribimos en el panel de Matrix
+            log.write(line.decode().rstrip())
+        await process.wait()
+        log.write(
+            f"\n[bold green]Rastreo finalizado. Puedes cerrar esta ventana.[/bold green]")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(None)
+
+
+class WatcherModal(ModalScreen[str]):
+    """Diálogo para añadir a la lista negra/vigilancia."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="watcher_dialog"):
+            yield Label("👀 Vigilar Nuevo Autor/Saga", classes="modal_title")
+            yield Input(placeholder="Ej: Tatsuki Fujimoto", id="inp_keyword")
+            with Horizontal(classes="form_buttons"):
+                yield Button("Vigilar", variant="success", id="btn_add")
+                yield Button("Cancelar", variant="error", id="btn_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_add":
+            self.dismiss(self.query_one("#inp_keyword", Input).value)
+        else:
+            self.dismiss(None)
+
+
+class LogPagesModal(ModalScreen[int]):
+    """Diálogo rápido para el Tracker."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="pages_dialog"):
+            yield Label("📖 Anotar Páginas Leídas Hoy", classes="modal_title")
+            yield Input(placeholder="Ej: 50", id="inp_pages")
+            with Horizontal(classes="form_buttons"):
+                yield Button("Guardar", variant="success", id="btn_add")
+                yield Button("Cancelar", variant="error", id="btn_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_add":
+            val = self.query_one("#inp_pages", Input).value
+            self.dismiss(int(val) if val.isdigit() else None)
         else:
             self.dismiss(None)
