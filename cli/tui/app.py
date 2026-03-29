@@ -5,7 +5,8 @@ from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
 from .constants import *
 from .screens import BookDetailsScreen
-from .modals import IsbnModal, QuickEditModal
+import datetime
+from .modals import IsbnModal, FullEditModal, LendModal, DirModal
 
 
 class NeoLibraryApp(App):
@@ -23,9 +24,11 @@ class NeoLibraryApp(App):
     }
     #sidebar.-visible { display: block; }
     
-    IsbnModal, QuickEditModal { align: center middle; }
+    IsbnModal, FullEditModal, LendModal, DirModal { align: center middle; }
     #isbn_dialog { width: 40; height: 15; padding: 1 2; border: heavy $accent; background: $surface; }
-    #edit_dialog { width: 50; height: 23; padding: 1 2; border: heavy $warning; background: $surface; }
+    #full_edit_dialog { width: 60; height: 80%; padding: 1 2; border: heavy $warning; background: $surface; }
+    #lend_dialog { width: 40; height: 15; padding: 1 2; border: heavy $success; background: $surface; }
+    #dir_dialog { width: 40; height: 17; padding: 1 2; border: heavy $accent; background: $surface; }
     .modal_title { text-style: bold; margin-bottom: 1; }
     .form_buttons { height: auto; margin-top: 1; align: center middle; }
     Button { margin: 0 1; }
@@ -36,9 +39,6 @@ class NeoLibraryApp(App):
     BINDINGS = [
         ("q", "quit", "Salir"),
         ("ctrl+b", "toggle_sidebar", "Explorador"),
-        ("a", "add_book", "Añadir (ISBN)"),
-        ("e", "edit_book", "Editar Ficha"),
-        ("d", "show_details", "Ver Detalles"),
         ("1", "switch_tab('tab_library')", "Inv"),
         ("2", "switch_tab('tab_inbox')", "Inbox"),
         ("3", "switch_tab('tab_loans')", "Préstamos"),
@@ -292,12 +292,14 @@ class NeoLibraryApp(App):
             self.app.call_from_thread(
                 self.notify, "Error al obtener datos.", severity="error")
 
+    # ================= EDITAR FICHA =================
+    # Cambia tu open_edit_modal_sync para usar el nuevo FullEditModal
     def open_edit_modal_sync(self, book: dict, book_id: str) -> None:
         def save_changes(payload: dict | None) -> None:
             if payload:
                 self.notify("Guardando cambios en el servidor...")
                 self.process_edit(book_id, payload)
-        self.push_screen(QuickEditModal(book), save_changes)
+        self.push_screen(FullEditModal(book), save_changes)
 
     @work(thread=True)
     def process_edit(self, book_id: str, payload: dict) -> None:
@@ -339,11 +341,91 @@ class NeoLibraryApp(App):
     def action_process_inbox(self): self.notify(
         "Próximamente: Procesar Escaneos (Fase 47)")
 
-    def action_lend_book(self): self.notify(
-        "Próximamente: Prestar Libro (Fase 47)")
+    # ================= PRÉSTAMOS =================
+    def action_lend_book(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
+            return
+        table = self.query_one("#books_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            if row_key:
+                def do_lend(friend_name: str | None) -> None:
+                    if friend_name:
+                        self.process_lend(row_key, friend_name)
+                self.push_screen(LendModal(), do_lend)
+        except Exception:
+            self.notify("Selecciona un libro.", severity="warning")
 
-    def action_return_book(self): self.notify(
-        "Próximamente: Devolver Libro (Fase 47)")
+    @work(thread=True)
+    def process_lend(self, book_id: str, friend_name: str) -> None:
+        try:
+            f_resp = httpx.get(API_FRIENDS, timeout=5.0).json()
+            friend_id = next(
+                (f['id'] for f in f_resp if f['name'].lower() == friend_name.lower()), None)
+            if not friend_id:
+                friend_id = httpx.post(
+                    API_FRIENDS, json={"name": friend_name}, timeout=5.0).json()['id']
+
+            loan_payload = {"book": int(book_id), "friend": friend_id,
+                            "loan_date": datetime.datetime.now().strftime("%Y-%m-%d")}
+            if httpx.post(API_LOANS, json=loan_payload, timeout=5.0).status_code == 201:
+                httpx.patch(f"{API_LIBRARY}{book_id}/",
+                            json={"is_loaned": True}, timeout=5.0)
+                self.app.call_from_thread(
+                    self.notify, f"¡Prestado a {friend_name}!", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    def action_return_book(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_loans":
+            return
+        table = self.query_one("#loans_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            if row_key:
+                self.process_return(row_key)
+        except Exception:
+            self.notify("Selecciona un préstamo activo.", severity="warning")
+
+    @work(thread=True)
+    def process_return(self, loan_id: str) -> None:
+        try:
+            book_id = httpx.get(f"{API_LOANS}{loan_id}/",
+                                timeout=5.0).json().get('book')
+            if httpx.delete(f"{API_LOANS}{loan_id}/", timeout=5.0).status_code == 204:
+                httpx.patch(f"{API_LIBRARY}{book_id}/",
+                            json={"is_loaned": False}, timeout=5.0)
+                self.app.call_from_thread(
+                    self.notify, "¡Libro devuelto a la estantería!", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    # ================= DIRECTORIOS =================
+    def action_create_dir(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
+            return
+
+        def do_create(payload: dict | None) -> None:
+            if payload:
+                self.process_create_dir(payload)
+        self.push_screen(DirModal(), do_create)
+
+    @work(thread=True)
+    def process_create_dir(self, payload: dict) -> None:
+        try:
+            if httpx.post(API_DIRECTORIES, json=payload, timeout=5.0).status_code == 201:
+                self.app.call_from_thread(
+                    self.notify, f"Directorio '{payload['name']}' creado", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
 
     def action_log_pages(self): self.notify(
         "Próximamente: Anotar Páginas (Fase 47)")

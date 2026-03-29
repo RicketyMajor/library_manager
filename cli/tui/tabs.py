@@ -9,6 +9,8 @@ class InventoryTab(TabPane):
         ("a", "app.add_book", "Añadir (ISBN)"),
         ("e", "app.edit_book", "Editar Ficha"),
         ("d", "app.show_details", "Ver Detalles"),
+        ("l", "app.lend_book", "Prestar a Amigo"),
+        ("c", "app.create_dir", "Crear Carpeta"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -26,10 +28,8 @@ class InboxTab(TabPane):
 
 
 class LoansTab(TabPane):
-    """Pestaña 3: Préstamos a amigos."""
     BINDINGS = [
-        ("l", "app.lend_book", "Prestar Libro"),
-        ("r", "app.return_book", "Devolver"),
+        ("r", "app.return_book", "Devolver a Estantería"),
     ]
 
     def compose(self) -> ComposeResult:
