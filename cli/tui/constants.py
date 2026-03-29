@@ -1,0 +1,7 @@
+API_LIBRARY = "http://localhost:8000/api/books/library/"
+API_SCAN = "http://localhost:8000/api/books/scan/"
+API_INBOX = "http://localhost:8000/api/books/inbox/"
+API_LOANS = "http://localhost:8000/api/books/loans/"
+API_TRACKER = "http://localhost:8000/api/books/tracker/stats/"
+API_WISHLIST = "http://localhost:8000/api/books/wishlist-crud/"
+API_DIRECTORIES = "http://localhost:8000/api/books/directories/"

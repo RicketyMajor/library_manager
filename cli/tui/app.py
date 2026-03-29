@@ -1,182 +1,29 @@
 import httpx
 from textual.app import App, ComposeResult
-from textual.screen import Screen, ModalScreen
-from textual.widgets import Header, Footer, DataTable, Markdown, Input, Button, Label, TabbedContent, TabPane, Tree
-from textual.containers import VerticalScroll, Vertical, Horizontal
+from textual.widgets import Header, Footer, DataTable, Markdown, TabbedContent, TabPane, Tree
 from textual import work
 
-API_LIBRARY = "http://localhost:8000/api/books/library/"
-API_SCAN = "http://localhost:8000/api/books/scan/"
-API_INBOX = "http://localhost:8000/api/books/inbox/"
-API_LOANS = "http://localhost:8000/api/books/loans/"
-API_TRACKER = "http://localhost:8000/api/books/tracker/stats/"
-API_WISHLIST = "http://localhost:8000/api/books/wishlist-crud/"
-API_DIRECTORIES = "http://localhost:8000/api/books/directories/"
-
-# ==============================================================================
-# 📄 PANTALLA SECUNDARIA: DETALLES DEL LIBRO (FASE 40)
-# ==============================================================================
+# 🚀 Importaciones Modulares
+from .constants import *
+from .screens import BookDetailsScreen
+from .modals import IsbnModal, QuickEditModal
 
 
-class BookDetailsScreen(Screen):
-    BINDINGS = [
-        ("escape, b, left", "go_back", "Volver a la Tabla"),
-        ("q", "app.quit", "Salir")
-    ]
-
-    def __init__(self, book_id: str, **kwargs):
-        super().__init__(**kwargs)
-        self.book_id = book_id
-
-    def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
-        with VerticalScroll(id="details_container"):
-            yield Markdown("Cargando los archivos de la base de datos...", id="details_content")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.fetch_details()
-
-    @work(thread=True)
-    def fetch_details(self) -> None:
-        try:
-            resp = httpx.get(f"{API_LIBRARY}{self.book_id}/", timeout=5.0)
-            if resp.status_code == 200:
-                book = resp.json()
-                self.app.call_from_thread(self.render_details, book)
-            else:
-                self.app.call_from_thread(
-                    self.show_error, f"Error {resp.status_code}")
-        except Exception as e:
-            self.app.call_from_thread(self.show_error, f"Error de red: {e}")
-
-    def render_details(self, book: dict) -> None:
-        content = self.query_one("#details_content", Markdown)
-        generos_str = ", ".join(book.get('genre_list', [])) if book.get(
-            'genre_list') else "Sin clasificar"
-        estado = "✔ Leído" if book.get('is_read') else "✘ Pendiente"
-        ubicacion = "⇋ Prestado" if book.get(
-            'is_loaned') else "❖ En Estantería"
-
-        md_text = f"""
-# {book.get('title', 'Sin Título').upper()}
-{f"*{book.get('subtitle')}*" if book.get('subtitle') else ""}
-
-**Autor:** {book.get('author_name', 'Desconocido')}
-**Editorial:** {book.get('publisher') or '-'} | **Formato:** {book.get('format_type', '-')} | **Géneros:** {generos_str}
-**Páginas:** {book.get('page_count') or '-'} | **Publicación:** {book.get('publish_date') or '-'}
-
----
-### ⌖ Estado Físico
-* **Lectura:** {estado}
-* **Ubicación:** {ubicacion}
-"""
-        details = book.get('details', {})
-        if details:
-            md_text += "### ◈ Detalles Adicionales\n"
-            for k, v in details.items():
-                if isinstance(v, list):
-                    v = ", ".join(v)
-                md_text += f"* **{k.replace('_', ' ').title()}:** {v}\n"
-
-        desc = book.get('description')
-        if desc:
-            md_text += f"\n### 📖 Sinopsis\n{desc}"
-
-        content.update(md_text)
-
-    def show_error(self, message: str) -> None:
-        self.query_one("#details_content", Markdown).update(
-            f"### ❌ Error\n{message}")
-
-    def action_go_back(self) -> None:
-        self.app.pop_screen()
-
-
-# ==============================================================================
-# 🪟 MODALES EMERGENTES (FASE 41)
-# ==============================================================================
-class IsbnModal(ModalScreen[str]):
-    """Ventana flotante para ingresar un ISBN nuevo."""
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="isbn_dialog"):
-            yield Label("📚 Añadir Nuevo Ejemplar", classes="modal_title")
-            yield Label("Ingresa el código ISBN:")
-            yield Input(placeholder="Ej: 9788414106222", id="isbn_input")
-            with Horizontal(classes="form_buttons"):
-                yield Button("Añadir", variant="success", id="btn_add")
-                yield Button("Cancelar", variant="error", id="btn_cancel")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn_add":
-            val = self.query_one("#isbn_input", Input).value
-            self.dismiss(val)  # Cierra el modal y devuelve el valor a la App
-        else:
-            self.dismiss(None)
-
-
-class QuickEditModal(ModalScreen[dict]):
-    """Ventana flotante para editar rápidamente una ficha."""
-
-    def __init__(self, book: dict, **kwargs):
-        super().__init__(**kwargs)
-        self.book = book
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="edit_dialog"):
-            yield Label(f"✏️ Editando: {self.book.get('title')}", classes="modal_title")
-            yield Input(value=self.book.get('title', ''), id="inp_title", placeholder="Título")
-            yield Input(value=self.book.get('author_name', ''), id="inp_author", placeholder="Autor")
-            yield Input(value=self.book.get('format_type', ''), id="inp_format", placeholder="Formato (NOVEL, MANGA...)")
-            yield Input(value=self.book.get('publisher', ''), id="inp_publisher", placeholder="Editorial")
-            with Horizontal(classes="form_buttons"):
-                yield Button("Guardar", variant="success", id="btn_save")
-                yield Button("Cancelar", variant="error", id="btn_cancel")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn_save":
-            payload = {
-                "title": self.query_one("#inp_title", Input).value,
-                "author_input": self.query_one("#inp_author", Input).value,
-                "format_type": self.query_one("#inp_format", Input).value,
-                "publisher": self.query_one("#inp_publisher", Input).value,
-            }
-            self.dismiss(payload)
-        else:
-            self.dismiss(None)
-
-
-# ==============================================================================
-# 🏠 PANTALLA PRINCIPAL: EL INVENTARIO
-# ==============================================================================
 class NeoLibraryApp(App):
-
     all_books = []
 
     CSS = """
     Screen { background: $surface-darken-1; }
-    
-    /* Usamos 1fr en lugar de 100% para que Textual calcule 
-       bien el tamaño dentro de pestañas ocultas */
     DataTable { height: 1fr; margin: 1 2; }
-    
     #details_container { margin: 2 4; padding: 1 2; border: heavy $accent; background: $surface; }
 
-    /* Estilos del explorador lateral oculto */
     #sidebar {
-        dock: left;
-        width: 35;
-        height: 100%;
-        background: $surface-darken-2;
-        border-right: vkey $background;
-        display: none; /* Oculto por defecto */
+        dock: left; width: 35; height: 100%;
+        background: $surface-darken-2; border-right: vkey $background;
+        display: none;
     }
-    #sidebar.-visible {
-        display: block; /* Se muestra al presionar Ctrl+B */
-    }
+    #sidebar.-visible { display: block; }
     
-    /* Estilos de los Modales Flotantes */
     IsbnModal, QuickEditModal { align: center middle; }
     #isbn_dialog { width: 40; height: 15; padding: 1 2; border: heavy $accent; background: $surface; }
     #edit_dialog { width: 50; height: 23; padding: 1 2; border: heavy $warning; background: $surface; }
@@ -200,10 +47,9 @@ class NeoLibraryApp(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Tree("📁 Raíz de la Biblioteca", id="sidebar")
-        # Contenedor de Pestañas
         with TabbedContent(initial="tab_library", id="main_tabs"):
             with TabPane("▤ Inventario", id="tab_library"):
-                yield DataTable(id="books_table")  # Le dimos un ID específico
+                yield DataTable(id="books_table")
             with TabPane("◈ Inbox", id="tab_inbox"):
                 yield DataTable(id="inbox_table")
             with TabPane("⇋ Préstamos", id="tab_loans"):
@@ -213,20 +59,17 @@ class NeoLibraryApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        # Configurar Tabla 1: Inventario
         t_books = self.query_one("#books_table", DataTable)
         t_books.cursor_type = "row"
         t_books.zebra_stripes = True
         t_books.add_columns("ID", "Título", "Autor",
                             "Formato", "Editorial", "Estado")
 
-        # Configurar Tabla 2: Inbox
         t_inbox = self.query_one("#inbox_table", DataTable)
         t_inbox.cursor_type = "row"
         t_inbox.zebra_stripes = True
         t_inbox.add_columns("ID", "ISBN", "Fecha de Escaneo")
 
-        # Configurar Tabla 3: Préstamos
         t_loans = self.query_one("#loans_table", DataTable)
         t_loans.cursor_type = "row"
         t_loans.zebra_stripes = True
@@ -237,7 +80,6 @@ class NeoLibraryApp(App):
 
     @work(thread=True)
     def load_all_data(self) -> None:
-        # 1. Cargar Libros y Directorios
         try:
             books = httpx.get(API_LIBRARY, timeout=5.0).json()
             dirs = httpx.get(API_DIRECTORIES, timeout=5.0).json()
@@ -245,21 +87,18 @@ class NeoLibraryApp(App):
                 self.all_books = books
                 orphan = [b for b in books if b.get('directory') is None]
                 self.app.call_from_thread(self.populate_books, orphan)
-                self.app.call_from_thread(
-                    self.populate_tree, dirs)
+                self.app.call_from_thread(self.populate_tree, dirs)
         except Exception as e:
             self.app.call_from_thread(
                 self.notify, f"Error en Inventario: {e}", severity="error")
 
-        # 2. Cargar Inbox
         try:
             inbox = httpx.get(API_INBOX, timeout=5.0).json()
             if isinstance(inbox, list):
                 self.app.call_from_thread(self.populate_inbox, inbox)
         except Exception:
-            pass  # Falla silenciosa para no llenar de alertas
+            pass
 
-        # 3. Cargar Préstamos
         try:
             loans = httpx.get(API_LOANS, timeout=5.0).json()
             if isinstance(loans, list):
@@ -267,7 +106,6 @@ class NeoLibraryApp(App):
         except Exception:
             pass
 
-        # 4. Cargar Hábitos
         try:
             tracker = httpx.get(API_TRACKER, timeout=5.0).json()
             if isinstance(tracker, dict):
@@ -275,23 +113,16 @@ class NeoLibraryApp(App):
         except Exception:
             pass
 
-    # Construye las ramas del árbol
-
     def populate_tree(self, dirs: list) -> None:
         tree = self.query_one("#sidebar", Tree)
         tree.root.expand()
-        tree.root.data = "root"  # Etiqueta invisible para saber si clickeaste la raíz
-
-        # Esto elimina todas las ramas viejas pero mantiene la "Raíz" viva
+        tree.root.data = "root"
         tree.clear()
 
         for d in dirs:
-            # Cuenta cuántos libros hay en esta carpeta usando nuestra caché
             count = sum(1 for b in self.all_books if b.get(
                 'directory') == d['id'])
-            # Renderizado colorido estilo NERDTree
             node_label = f"[{d.get('color_hex', 'cyan')}]■ {d['name']}[/] [dim]({count})[/dim]"
-            # El atributo 'data' almacena el ID real del directorio para el filtro
             tree.root.add(node_label, data=d['id'])
 
     def populate_books(self, books: list) -> None:
@@ -333,19 +164,14 @@ class NeoLibraryApp(App):
         md.update(text)
 
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
-        # 🚀 CORRECCIÓN: Ahora ordena la tabla específica en la que hiciste clic
         event.control.sort(event.column_key)
 
-    # 🚀 ACCIÓN: CAMBIAR PESTAÑAS (PARCHE 4)
     def action_switch_tab(self, tab_id: str) -> None:
         self.query_one("#main_tabs", TabbedContent).active = tab_id
 
     def action_show_details(self) -> None:
-        # 🚀 SEGURO: Si no estamos en la pestaña del inventario, no hace nada
         if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
             return
-
-        # <-- Apuntamos explícitamente a #books_table
         table = self.query_one("#books_table", DataTable)
         try:
             row_key = table.coordinate_to_cell_key(
@@ -355,16 +181,12 @@ class NeoLibraryApp(App):
         except Exception:
             pass
 
-    # AÑADIR LIBRO
     def action_add_book(self) -> None:
-        # Callback: Qué hacer cuando el modal se cierra
         def check_isbn(isbn: str | None) -> None:
             if isbn:
                 self.notify(
                     f"Buscando oráculos globales para {isbn}...", title="Escáner")
                 self.process_isbn_add(isbn)
-
-        # Abre el modal flotante
         self.push_screen(IsbnModal(), check_isbn)
 
     @work(thread=True)
@@ -374,8 +196,7 @@ class NeoLibraryApp(App):
             if resp.status_code in [200, 201]:
                 self.app.call_from_thread(
                     self.notify, "¡Libro registrado exitosamente!", title="Éxito")
-                self.app.call_from_thread(
-                    self.load_all_data)  # Refresca la tabla
+                self.app.call_from_thread(self.load_all_data)
             else:
                 self.app.call_from_thread(
                     self.notify, f"Error: {resp.json().get('error', 'Desconocido')}", severity="error")
@@ -383,15 +204,11 @@ class NeoLibraryApp(App):
             self.app.call_from_thread(
                 self.notify, f"Error de red: {e}", severity="error")
 
-    # EDITAR LIBRO
     def action_edit_book(self) -> None:
-        # 🚀 SEGURO: Si no estamos en la pestaña del inventario, bloquea la acción
         if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
             self.notify(
                 "La edición solo está disponible en el Inventario.", severity="warning")
             return
-
-        # <-- Apuntamos explícitamente a #books_table
         table = self.query_one("#books_table", DataTable)
         try:
             row_key = table.coordinate_to_cell_key(
@@ -416,7 +233,6 @@ class NeoLibraryApp(App):
                 self.notify, "Error al obtener datos.", severity="error")
 
     def open_edit_modal_sync(self, book: dict, book_id: str) -> None:
-        # Callback: Qué hacer cuando se presiona "Guardar" en el Modal
         def save_changes(payload: dict | None) -> None:
             if payload:
                 self.notify("Guardando cambios en el servidor...")
@@ -439,22 +255,16 @@ class NeoLibraryApp(App):
             self.app.call_from_thread(
                 self.notify, "Error de red.", severity="error")
 
-    # Mostrar/Ocultar barra lateral
     def action_toggle_sidebar(self) -> None:
         sidebar = self.query_one("#sidebar", Tree)
         sidebar.toggle_class("-visible")
         if sidebar.has_class("-visible"):
             sidebar.focus()
 
-    # Al hacer clic en un Universo/Directorio
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        # Si el usuario hace doble clic para expandir la raíz, evitamos el error
         if event.node.data is None:
             return
-
         dir_id = event.node.data
-
-        # Filtramos usando nuestra memoria caché ultrarrápida
         if dir_id == "root":
             filtered_books = [
                 b for b in self.all_books if b.get('directory') is None]
@@ -463,9 +273,5 @@ class NeoLibraryApp(App):
             filtered_books = [
                 b for b in self.all_books if b.get('directory') == dir_id]
             self.notify(f"Universo filtrado ({len(filtered_books)} obras)")
-
-        # Actualizamos la tabla
         self.populate_books(filtered_books)
-
-        # Aseguramos que la pantalla cambie a la pestaña de Inventario
         self.action_switch_tab("tab_library")
