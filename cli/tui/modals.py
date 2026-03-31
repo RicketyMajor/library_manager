@@ -46,7 +46,7 @@ class FullEditModal(ModalScreen[dict]):
                 yield Label("Autor Principal:", classes="edit_label")
                 yield Input(value=self.book.get('author_name', ''), id="inp_author")
 
-                yield Label("Formato (NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC):", classes="edit_label")
+                yield Label("Formato (NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC, POEM):", classes="edit_label")
                 yield Input(value=self.book.get('format_type', ''), id="inp_format")
 
                 yield Label("Editorial:", classes="edit_label")
@@ -229,3 +229,82 @@ class ConfirmModal(ModalScreen[bool]):
             self.dismiss(True)
         else:
             self.dismiss(False)
+
+
+class AddMenuModal(ModalScreen[str]):
+    """Menú principal de adquisición (Escáner, ISBN, Manual)."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="add_menu_dialog"):
+            yield Label("✨ Añadir Nuevo Ejemplar", classes="modal_title")
+            yield Label("Selecciona el método de ingreso:", classes="edit_label")
+            yield Button("Escáner Móvil (QR)", variant="primary", id="btn_scan")
+            yield Button("Por código ISBN", variant="primary", id="btn_isbn")
+            yield Button("Ingreso 100% Manual", variant="primary", id="btn_manual")
+            yield Button("Cancelar", variant="error", id="btn_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_scan":
+            self.dismiss("scan")
+        elif event.button.id == "btn_isbn":
+            self.dismiss("isbn")
+        elif event.button.id == "btn_manual":
+            self.dismiss("manual")
+        else:
+            self.dismiss(None)
+
+
+class ManualAddModal(ModalScreen[dict]):
+    """Formulario gigante para crear un libro desde cero."""
+
+    def compose(self) -> ComposeResult:
+        # Reusamos el ID "full_edit_dialog" para aprovechar su CSS de Scroll y tamaño
+        with Vertical(id="full_edit_dialog"):
+            yield Label("✍️ Ingreso Manual de Ejemplar", classes="modal_title")
+            with VerticalScroll():
+                yield Label("Título de la obra (*):", classes="edit_label")
+                yield Input(id="inp_title", placeholder="Ej: Las Flores del Mal")
+
+                yield Label("Subtítulo (Opcional):", classes="edit_label")
+                yield Input(id="inp_sub")
+
+                yield Label("Autor Principal:", classes="edit_label")
+                yield Input(id="inp_author", placeholder="Ej: Charles Baudelaire")
+
+                yield Label("Formato (NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC, POEM):", classes="edit_label")
+                # 🚀 POEM por defecto como ejemplo
+                yield Input(value="POEM", id="inp_format")
+
+                yield Label("Editorial:", classes="edit_label")
+                yield Input(id="inp_publisher")
+
+                yield Label("Géneros (separados por coma):", classes="edit_label")
+                yield Input(id="inp_genres")
+
+                yield Label("Número total de páginas:", classes="edit_label")
+                yield Input(id="inp_pages")
+
+                yield Label("")  # Espaciador
+                yield Checkbox("✔ Libro Completado/Leído", value=False, id="chk_read")
+
+            with Horizontal(classes="form_buttons"):
+                yield Button("Guardar en Biblioteca", variant="success", id="btn_save")
+                yield Button("Cancelar", variant="error", id="btn_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_save":
+            pages_val = self.query_one("#inp_pages", Input).value
+            payload = {
+                "title": self.query_one("#inp_title", Input).value,
+                "subtitle": self.query_one("#inp_sub", Input).value,
+                "author_input": self.query_one("#inp_author", Input).value,
+                "format_type": self.query_one("#inp_format", Input).value.upper(),
+                "publisher": self.query_one("#inp_publisher", Input).value,
+                "genre_input": self.query_one("#inp_genres", Input).value,
+                "is_read": self.query_one("#chk_read", Checkbox).value,
+            }
+            if pages_val.isdigit():
+                payload["page_count"] = int(pages_val)
+            self.dismiss(payload)
+        elif event.button.id == "btn_cancel":
+            self.dismiss(None)

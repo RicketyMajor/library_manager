@@ -8,7 +8,7 @@ from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
 from .constants import *
 from .screens import BookDetailsScreen
-from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal, ConfirmModal
+from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal, ConfirmModal, AddMenuModal, ManualAddModal
 
 
 class NeoLibraryApp(App):
@@ -40,6 +40,9 @@ class NeoLibraryApp(App):
     #sync_dialog { width: 80%; height: 80%; padding: 1 2; border: heavy $success; background: $surface; }
     #watcher_dialog, #pages_dialog { width: 40; height: 15; padding: 1 2; border: heavy $accent; background: $surface; }
     #sync_log { height: 1fr; border: solid $primary; background: #0c0c0c; }
+    AddMenuModal, ManualAddModal { align: center middle; }
+    #add_menu_dialog { width: 40; height: auto; padding: 1 2; border: heavy $accent; background: $surface; }
+    #add_menu_dialog Button { width: 100%; margin-bottom: 1; }
     """
 
     BINDINGS = [
@@ -243,13 +246,53 @@ class NeoLibraryApp(App):
         except Exception:
             pass
 
+    # ================= ADQUISICIONES =================
     def action_add_book(self) -> None:
-        def check_isbn(isbn: str | None) -> None:
-            if isbn:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
+            return
+
+        # Callback del menú principal
+        def handle_menu_choice(choice: str | None) -> None:
+            if choice == "scan":
                 self.notify(
-                    f"Buscando oráculos globales para {isbn}...", title="Escáner")
-                self.process_isbn_add(isbn)
-        self.push_screen(IsbnModal(), check_isbn)
+                    "Fase 52: Resurrección del Escáner SSH en la próxima fase...", severity="info")
+            elif choice == "isbn":
+                self.push_screen(IsbnModal(), self.handle_isbn_input)
+            elif choice == "manual":
+                self.push_screen(ManualAddModal(), self.handle_manual_input)
+
+        self.push_screen(AddMenuModal(), handle_menu_choice)
+
+    # Camino 1: ISBN
+    def handle_isbn_input(self, isbn: str | None) -> None:
+        if isbn:
+            self.notify(
+                f"Buscando oráculos globales para {isbn}...", title="Escáner")
+            self.process_isbn_add(isbn)
+
+    # Camino 2: Ingreso Manual
+    def handle_manual_input(self, payload: dict | None) -> None:
+        if payload and payload.get("title"):  # Validación básica
+            self.notify("Guardando ingreso manual en el servidor...")
+            self.process_manual_add(payload)
+        elif payload:
+            self.notify("El Título de la obra es obligatorio.",
+                        severity="error")
+
+    @work(thread=True)
+    def process_manual_add(self, payload: dict) -> None:
+        try:
+            resp = httpx.post(API_LIBRARY, json=payload, timeout=5.0)
+            if resp.status_code == 201:
+                self.app.call_from_thread(
+                    self.notify, "¡Obra registrada magistralmente!", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+            else:
+                self.app.call_from_thread(
+                    self.notify, f"Error: {resp.text}", severity="error")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error de red: {e}", severity="error")
 
     @work(thread=True)
     def process_isbn_add(self, isbn: str) -> None:
