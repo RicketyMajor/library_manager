@@ -8,7 +8,7 @@ from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
 from .constants import *
 from .screens import BookDetailsScreen
-from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal, ConfirmModal, AddMenuModal, ManualAddModal, ScannerModal
+from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal, ConfirmModal, AddMenuModal, ManualAddModal, ScannerModal, FinishBookModal, WatchersListModal
 
 
 class NeoLibraryApp(App):
@@ -46,6 +46,10 @@ class NeoLibraryApp(App):
     ScannerModal { align: center middle; }
     #scanner_dialog { width: 50; height: 35; padding: 1 2; border: heavy $success; background: $surface; }
     #scanner_qr { height: 1fr; background: #000000; color: #ffffff; text-align: center; } 
+    FinishBookModal, WatchersListModal { align: center middle; }
+    #finish_dialog { width: 50; height: 22; padding: 1 2; border: heavy $warning; background: $surface; }
+    #watchers_list_dialog { width: 50; height: 25; padding: 1 2; border: heavy $accent; background: $surface; }
+    #watchers_scroll { height: 1fr; border: solid $primary; padding: 1; margin-bottom: 1; }
     """
 
     BINDINGS = [
@@ -525,11 +529,92 @@ class NeoLibraryApp(App):
             self.app.call_from_thread(
                 self.notify, f"Error: {e}", severity="error")
 
+    # ================= TRACKER: TERMINAR LIBRO =================
     def action_finish_book(self) -> None:
         if self.query_one("#main_tabs", TabbedContent).active != "tab_tracker":
             return
-        self.notify(
-            "Para finalizar un libro, edita su ficha (tecla E) en el Inventario y marca 'Leído'.", severity="info")
+
+        def do_finish(payload: dict | None) -> None:
+            if payload and payload.get('title'):
+                self.process_finish_book(payload)
+        self.push_screen(FinishBookModal(), do_finish)
+
+    @work(thread=True)
+    def process_finish_book(self, payload: dict) -> None:
+        try:
+            # 1. Registramos en el Tracker
+            resp = httpx.post(API_TRACKER_FINISH, json=payload, timeout=5.0)
+            if resp.status_code == 201:
+                # 2. TRANSACCIÓN DISTRIBUIDA: Buscamos si el libro existe en Inventario
+                lib_resp = httpx.get(API_LIBRARY, params={
+                                     "title": payload['title']}, timeout=5.0)
+                if lib_resp.status_code == 200 and lib_resp.json():
+                    book_id = lib_resp.json()[0]['id']
+                    # 3. Lo marcamos como leído automáticamente!
+                    httpx.patch(f"{API_LIBRARY}{book_id}/",
+                                json={"is_read": True}, timeout=5.0)
+
+                self.app.call_from_thread(
+                    self.notify, "¡Victoria Registrada y Sincronizada!", title="Éxito")
+                self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    # ================= WISHLIST: GESTIÓN AVANZADA =================
+    def action_view_watchers(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_wishlist":
+            return
+        self.notify("Consultando base de datos...", timeout=1)
+        self.fetch_and_show_watchers()
+
+    @work(thread=True)
+    def fetch_and_show_watchers(self) -> None:
+        try:
+            watchers = httpx.get(API_WATCHERS, timeout=5.0).json()
+
+            def do_delete_watcher(w_id: int | None) -> None:
+                if w_id:
+                    self.process_delete_watcher(w_id)
+            self.app.call_from_thread(
+                self.push_screen, WatchersListModal(watchers), do_delete_watcher)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    @work(thread=True)
+    def process_delete_watcher(self, watcher_id: int) -> None:
+        try:
+            if httpx.delete(f"{API_WATCHERS}{watcher_id}/", timeout=5.0).status_code == 204:
+                self.app.call_from_thread(
+                    self.notify, "Autor eliminado del radar.", title="Éxito")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
+
+    def action_clear_wishlist(self) -> None:
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_wishlist":
+            return
+
+        def do_clear(confirm: bool | None) -> None:
+            if confirm:
+                self.process_clear_wishlist()
+        self.push_screen(ConfirmModal(
+            "¿Ocultar TODOS los libros del tablón actual?"), do_clear)
+
+    @work(thread=True)
+    def process_clear_wishlist(self) -> None:
+        try:
+            items = httpx.get(API_WISHLIST, timeout=5.0).json()
+            for item in items:
+                httpx.patch(
+                    f"{API_WISHLIST}{item['id']}/", json={"is_rejected": True}, timeout=5.0)
+            self.app.call_from_thread(
+                self.notify, f"{len(items)} libros enviados a la lista negra.", title="Limpieza")
+            self.app.call_from_thread(self.load_all_data)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error: {e}", severity="error")
 
     # ================= WISHLIST & SCRAPER =================
     def action_sync_scraper(self) -> None:

@@ -13,7 +13,7 @@ class IsbnModal(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="isbn_dialog"):
-            yield Label("📚 Añadir Nuevo Ejemplar", classes="modal_title")
+            yield Label("Añadir Nuevo Ejemplar", classes="modal_title")
             yield Label("Ingresa el código ISBN:")
             yield Input(placeholder="Ej: 9788414106222", id="isbn_input")
             with Horizontal(classes="form_buttons"):
@@ -37,7 +37,7 @@ class FullEditModal(ModalScreen[dict]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="full_edit_dialog"):
-            yield Label(f"✏️ Editando: {self.book.get('title')}", classes="modal_title")
+            yield Label(f"Editando: {self.book.get('title')}", classes="modal_title")
             with VerticalScroll():
                 yield Label("Título de la obra:", classes="edit_label")
                 yield Input(value=self.book.get('title', ''), id="inp_title")
@@ -48,7 +48,7 @@ class FullEditModal(ModalScreen[dict]):
                 yield Label("Autor Principal:", classes="edit_label")
                 yield Input(value=self.book.get('author_name', ''), id="inp_author")
 
-                yield Label("(NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC, POEM):", classes="edit_label")
+                yield Label("Formato (NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC, POEM):", classes="edit_label")
                 yield Input(value=self.book.get('format_type', ''), id="inp_format")
 
                 yield Label("Editorial:", classes="edit_label")
@@ -95,7 +95,7 @@ class LendModal(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="lend_dialog"):
-            yield Label("🤝 Prestar Ejemplar", classes="modal_title")
+            yield Label("Prestar Ejemplar", classes="modal_title")
             yield Input(placeholder="Nombre de tu amigo...", id="inp_friend")
             with Horizontal(classes="form_buttons"):
                 yield Button("Prestar", variant="success", id="btn_lend")
@@ -381,3 +381,62 @@ class ScannerModal(ModalScreen[None]):
                 self.tunnel_process.terminate()
             except:
                 pass
+
+
+class FinishBookModal(ModalScreen[dict]):
+    """Diálogo para registrar un libro como terminado en el año."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="finish_dialog"):
+            yield Label("Registrar Libro Terminado", classes="modal_title")
+            yield Label("Título de la obra:", classes="edit_label")
+            yield Input(id="inp_title", placeholder="Ej: Dune")
+            yield Label("Autor Principal:", classes="edit_label")
+            yield Input(id="inp_author", placeholder="Ej: Frank Herbert")
+            yield Label("")  # Espaciador
+            yield Checkbox("✔ Este libro es de mi propiedad (En Estantería)", value=True, id="chk_owned")
+
+            with Horizontal(classes="form_buttons"):
+                yield Button("Registrar Victoria", variant="success", id="btn_save")
+                yield Button("Cancelar", variant="error", id="btn_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_save":
+            self.dismiss({
+                "title": self.query_one("#inp_title", Input).value,
+                "author_name": self.query_one("#inp_author", Input).value,
+                "is_owned": self.query_one("#chk_owned", Checkbox).value
+            })
+        else:
+            self.dismiss(None)
+
+
+class WatchersListModal(ModalScreen[int]):
+    """Lista los autores vigilados y permite eliminarlos por ID."""
+
+    def __init__(self, watchers: list, **kwargs):
+        super().__init__(**kwargs)
+        self.watchers = watchers
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="watchers_list_dialog"):
+            yield Label("Radar de Vigilancia Actual", classes="modal_title")
+            with VerticalScroll(id="watchers_scroll"):
+                if not self.watchers:
+                    yield Label("No estás vigilando a nadie actualmente.", classes="edit_label")
+                for w in self.watchers:
+                    yield Label(f"[cyan]ID {w['id']}[/cyan] - {w['keyword']} (Desde: {w.get('created_at', '')[:10]})")
+
+            yield Label("Para dejar de vigilar a alguien, ingresa su ID:", classes="edit_label")
+            yield Input(placeholder="Ej: 3 (Deja en blanco para solo salir)", id="inp_del_id")
+
+            with Horizontal(classes="form_buttons"):
+                yield Button("Ejecutar", variant="error", id="btn_del")
+                yield Button("Cerrar", variant="primary", id="btn_cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_del":
+            val = self.query_one("#inp_del_id", Input).value
+            self.dismiss(int(val) if val.isdigit() else None)
+        else:
+            self.dismiss(None)

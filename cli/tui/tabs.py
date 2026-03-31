@@ -56,8 +56,10 @@ class WishlistTab(TabPane):
     BINDINGS = [
         ("s", "app.sync_scraper", "Sincronizar Scraper"),
         ("w", "app.add_watcher", "Vigilar Autor"),
+        ("v", "app.view_watchers", "Ver/Borrar Vigilados"),
         ("d", "app.wishlist_details", "Ver Enlace"),
         ("x", "app.delete_wishlist", "Ocultar Lanzamiento"),
+        ("c", "app.clear_wishlist", "Limpiar Todo"),
     ]
 
     def compose(self) -> ComposeResult:
