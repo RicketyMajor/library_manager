@@ -8,7 +8,7 @@ from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
 from .constants import *
 from .screens import BookDetailsScreen
-from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal, ConfirmModal, AddMenuModal, ManualAddModal
+from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleModal, WatcherModal, LogPagesModal, ConfirmModal, AddMenuModal, ManualAddModal, ScannerModal
 
 
 class NeoLibraryApp(App):
@@ -43,6 +43,9 @@ class NeoLibraryApp(App):
     AddMenuModal, ManualAddModal { align: center middle; }
     #add_menu_dialog { width: 40; height: auto; padding: 1 2; border: heavy $accent; background: $surface; }
     #add_menu_dialog Button { width: 100%; margin-bottom: 1; }
+    ScannerModal { align: center middle; }
+    #scanner_dialog { width: 50; height: 35; padding: 1 2; border: heavy $success; background: $surface; }
+    #scanner_qr { height: 1fr; background: #000000; color: #ffffff; text-align: center; } 
     """
 
     BINDINGS = [
@@ -254,8 +257,8 @@ class NeoLibraryApp(App):
         # Callback del menú principal
         def handle_menu_choice(choice: str | None) -> None:
             if choice == "scan":
-                self.notify(
-                    "Fase 52: Resurrección del Escáner SSH en la próxima fase...", severity="info")
+                # Lanzam el modal del Escáner SSH
+                self.push_screen(ScannerModal())
             elif choice == "isbn":
                 self.push_screen(IsbnModal(), self.handle_isbn_input)
             elif choice == "manual":

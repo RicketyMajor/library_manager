@@ -1,3 +1,5 @@
+import re
+import io
 import asyncio
 from textual.app import ComposeResult
 from textual.screen import ModalScreen
@@ -46,7 +48,7 @@ class FullEditModal(ModalScreen[dict]):
                 yield Label("Autor Principal:", classes="edit_label")
                 yield Input(value=self.book.get('author_name', ''), id="inp_author")
 
-                yield Label("Formato (NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC, POEM):", classes="edit_label")
+                yield Label("(NOVEL, MANGA, COMIC, ANTHOLOGY, ACADEMIC, POEM):", classes="edit_label")
                 yield Input(value=self.book.get('format_type', ''), id="inp_format")
 
                 yield Label("Editorial:", classes="edit_label")
@@ -178,7 +180,7 @@ class WatcherModal(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="watcher_dialog"):
-            yield Label("👀 Vigilar Nuevo Autor/Saga", classes="modal_title")
+            yield Label("Vigilar Nuevo Autor/Saga", classes="modal_title")
             yield Input(placeholder="Ej: Tatsuki Fujimoto", id="inp_keyword")
             with Horizontal(classes="form_buttons"):
                 yield Button("Vigilar", variant="success", id="btn_add")
@@ -196,7 +198,7 @@ class LogPagesModal(ModalScreen[int]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="pages_dialog"):
-            yield Label("📖 Anotar Páginas Leídas Hoy", classes="modal_title")
+            yield Label("Anotar Páginas Leídas Hoy", classes="modal_title")
             yield Input(placeholder="Ej: 50", id="inp_pages")
             with Horizontal(classes="form_buttons"):
                 yield Button("Guardar", variant="success", id="btn_add")
@@ -236,7 +238,7 @@ class AddMenuModal(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="add_menu_dialog"):
-            yield Label("✨ Añadir Nuevo Ejemplar", classes="modal_title")
+            yield Label("Añadir Nuevo Ejemplar", classes="modal_title")
             yield Label("Selecciona el método de ingreso:", classes="edit_label")
             yield Button("Escáner Móvil (QR)", variant="primary", id="btn_scan")
             yield Button("Por código ISBN", variant="primary", id="btn_isbn")
@@ -260,7 +262,7 @@ class ManualAddModal(ModalScreen[dict]):
     def compose(self) -> ComposeResult:
         # Reusamos el ID "full_edit_dialog" para aprovechar su CSS de Scroll y tamaño
         with Vertical(id="full_edit_dialog"):
-            yield Label("✍️ Ingreso Manual de Ejemplar", classes="modal_title")
+            yield Label("Ingreso Manual de Ejemplar", classes="modal_title")
             with VerticalScroll():
                 yield Label("Título de la obra (*):", classes="edit_label")
                 yield Input(id="inp_title", placeholder="Ej: Las Flores del Mal")
@@ -308,3 +310,74 @@ class ManualAddModal(ModalScreen[dict]):
             self.dismiss(payload)
         elif event.button.id == "btn_cancel":
             self.dismiss(None)
+
+
+class ScannerModal(ModalScreen[None]):
+    """Modal ciberpunk que levanta un túnel SSH y dibuja el QR en ASCII."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="scanner_dialog"):
+            yield Label("Iniciando Escáner Móvil...", id="scanner_title", classes="modal_title")
+            yield RichLog(id="scanner_qr", markup=False, highlight=False)
+            yield Button("Cerrar Conexión Segura", variant="error", id="btn_cancel")
+
+    async def on_mount(self) -> None:
+        log = self.query_one("#scanner_qr", RichLog)
+        title = self.query_one("#scanner_title", Label)
+        log.write("Negociando túnel cifrado SSH con localhost.run...\n")
+
+        key_path = str(Path.home() / ".ssh" / "library_cli_key")
+        try:
+            # Levanta el túnel en background
+            self.tunnel_process = await asyncio.create_subprocess_exec(
+                "ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o",
+                "ServerAliveInterval=60", "-R", "80:localhost:8000", "nokey@localhost.run",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            # Inicia el lector de logs
+            asyncio.create_task(self.read_output(log, title))
+        except Exception as e:
+            log.write(f"Error crítico iniciando SSH: {e}")
+
+    async def read_output(self, log: RichLog, title: Label) -> None:
+        while True:
+            line = await self.tunnel_process.stdout.readline()
+            if not line:
+                break
+            text_line = line.decode().strip()
+
+            # Intercepta la URL segura
+            match = re.search(r"(https://[a-zA-Z0-9-]+\.lhr\.life)", text_line)
+            if match:
+                url = match.group(1) + "/scanner/"
+                title.update(f"Escanea el QR o visita:\n{url}")
+                self.render_qr(url, log)
+                break  # Deja de leer la terminal para no saturar la pantalla
+
+    def render_qr(self, url: str, log: RichLog) -> None:
+        import qrcode
+        qr = qrcode.QRCode(version=1, box_size=1, border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+
+        # Engaña a qrcode para que imprima en una variable en vez de la consola real
+        f = io.StringIO()
+        qr.print_ascii(out=f, invert=True)
+
+        log.clear()
+        # Inyecta el QR renderizado en ASCII directo a nuestro Widget
+        log.write(f.getvalue())
+        log.write(
+            "\n[El servidor ya está escuchando. Escanea y presiona el botón abajo para terminar]")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(None)
+
+    def on_unmount(self) -> None:
+        # Si el usuario cierra el modal (con botón o ESC), matamos el proceso SSH
+        if hasattr(self, 'tunnel_process') and self.tunnel_process:
+            try:
+                self.tunnel_process.terminate()
+            except:
+                pass
