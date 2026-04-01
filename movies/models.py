@@ -43,3 +43,30 @@ class Movie(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class MovieWatcher(models.Model):
+    """Palabras clave, directores o sagas que el scraper vigilará en TMDB."""
+    keyword = models.CharField(
+        max_length=255, help_text="Director o Saga (Ej: Denis Villeneuve)")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.keyword
+
+
+class MovieWishlist(models.Model):
+    """Lanzamientos o descubrimientos que el scraper inyecta en el sistema."""
+    title = models.CharField(max_length=255)
+    director = models.CharField(max_length=255, null=True, blank=True)
+    release_year = models.CharField(max_length=10, null=True, blank=True)
+    tmdb_id = models.IntegerField(
+        null=True, blank=True, help_text="ID oficial para obtener el póster luego")
+
+    date_found = models.DateTimeField(auto_now_add=True)
+    # El martillo de borrado (Soft Delete)
+    is_rejected = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.title

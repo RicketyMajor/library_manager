@@ -4,7 +4,7 @@ from textual.screen import Screen
 from textual.widgets import Header, Footer, Markdown, Button, Label
 from textual.containers import VerticalScroll, Vertical, Horizontal, Grid
 from textual import work
-from .constants import API_LIBRARY
+from .constants import API_LIBRARY, API_TRACKER, API_MOVIES
 from .movie_screens import MovieMainScreen
 
 
@@ -100,7 +100,7 @@ class BookDetailsScreen(Screen):
 """
         self.query_one("#tech_panel", Markdown).update(tech_md)
 
-        # Sinopsis y Detalles Extra (Derecha)
+        # Sinopsis y Detalles Extra
         synopsis_md = ""
         details = book.get('details', {})
         if details:
@@ -115,6 +115,74 @@ class BookDetailsScreen(Screen):
         synopsis_md += f"### 📖 Sinopsis\n{desc if desc else '*Sin descripción disponible.*'}"
 
         self.query_one("#synopsis_panel", Markdown).update(synopsis_md)
+
+    def action_go_back(self) -> None:
+        self.app.pop_screen()
+
+
+class BunkerDashboardScreen(Screen):
+    """El centro de mando global con estadísticas unificadas."""
+
+    BINDINGS = [
+        ("escape, b, left", "go_back", "Volver al Menú Principal"),
+    ]
+
+    CSS = """
+    #dashboard_root { padding: 2 4; align: center middle; }
+    .dash_title { text-align: center; text-style: bold; color: $accent; margin-bottom: 2; width: 100%; }
+    #dash_grid { grid-size: 2; grid-gutter: 4; height: auto; }
+    .dash_panel { border: heavy $primary; padding: 1 2; background: $surface; height: 15; }
+    .dash_panel_title { text-align: center; text-style: bold; color: $success; margin-bottom: 1; border-bottom: solid $success; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dashboard_root"):
+            yield Label("CENTRO DE MANDO GLOBAL", classes="dash_title")
+            with Grid(id="dash_grid"):
+                with Vertical(classes="dash_panel"):
+                    yield Label("SECTOR LITERARIO", classes="dash_panel_title")
+                    yield Markdown("Calculando métricas...", id="dash_books")
+                with Vertical(classes="dash_panel"):
+                    yield Label("SECTOR CINEMATOGRÁFICO", classes="dash_panel_title")
+                    yield Markdown("Calculando métricas...", id="dash_movies")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.fetch_global_stats()
+
+    @work(thread=True)
+    def fetch_global_stats(self) -> None:
+        try:
+            # Consume el tracker de libros
+            books_stats = httpx.get(API_TRACKER, timeout=5.0).json()
+
+            # Consume el inventario de películas para calcular
+            movies_resp = httpx.get(API_MOVIES, timeout=5.0).json()
+            movies_watched = len(
+                [m for m in movies_resp if m.get('is_watched')])
+            movies_total = len(movies_resp)
+
+            self.app.call_from_thread(
+                self.render_dashboard, books_stats, movies_watched, movies_total)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error cargando el Centro de Mando: {e}", severity="error")
+
+    def render_dashboard(self, b_stats: dict, m_watched: int, m_total: int) -> None:
+        # Render libros
+        book_md = f"""
+* **Páginas leídas este mes:** `{b_stats.get('pages_this_month', 0)}`
+* **Libros terminados este mes:** `{b_stats.get('books_this_month', 0)}`
+        """
+        self.query_one("#dash_books", Markdown).update(book_md)
+
+        # Render películas
+        movie_md = f"""
+* **Películas Vistas (Histórico):** `{m_watched}`
+* **Total en Colección:** `{m_total}`
+* **Pendientes de ver:** `{m_total - m_watched}`
+        """
+        self.query_one("#dash_movies", Markdown).update(movie_md)
 
     def action_go_back(self) -> None:
         self.app.pop_screen()
@@ -152,15 +220,19 @@ class BunkerLauncherScreen(Screen):
     def compose(self) -> ComposeResult:
         with Vertical(id="launcher_root"):
             with Vertical(id="launcher_panel"):
-                yield Label("B U N K E R", classes="launcher_title")
+                yield Label("☢️  B U N K E R  ☢️", classes="launcher_title")
                 yield Button("1. Acceder a la Biblioteca", id="btn_lib", classes="launcher_btn", variant="primary")
                 yield Button("2. Acceder al Videoclub", id="btn_movie", classes="launcher_btn", variant="warning")
-                yield Button("3. Salir del Sistema", id="btn_quit", classes="launcher_btn", variant="error")
+                yield Button("3. Centro de Mando", id="btn_dash", classes="launcher_btn", variant="success")
+                yield Button("4. Salir del Sistema", id="btn_quit", classes="launcher_btn", variant="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_lib":
             self.app.pop_screen()
         elif event.button.id == "btn_movie":
+            from .movie_screens import MovieMainScreen
             self.app.push_screen(MovieMainScreen())
+        elif event.button.id == "btn_dash":
+            self.app.push_screen(BunkerDashboardScreen())
         elif event.button.id == "btn_quit":
             self.app.exit()

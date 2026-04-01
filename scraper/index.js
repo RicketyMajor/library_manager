@@ -5,6 +5,8 @@ const Fuse = require('fuse.js'); // El motor de coincidencias difusas
 
 const API_URL_WATCHERS = 'http://web:8000/api/books/watchers/';
 const API_URL_WISHLIST = 'http://web:8000/api/books/wishlist/add/';
+const API_BASE = 'http://web:8000/api'; // La IP interna de Docker
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
 
 async function getWatchers() {
     try {
@@ -46,10 +48,76 @@ async function verifyNewRelease(title) {
                 }
             }
         }
-        // Si no lo encuentra o es reciente, le damos el beneficio de la duda
+        // Si no lo encuentra o es reciente, le da el beneficio de la duda
         return { isNew: true, year: "Reciente/Desconocido" }; 
     } catch (error) {
-        return { isNew: true, year: "Error API" }; // No bloqueamos si falla la red
+        return { isNew: true, year: "Error API" }; // No bloquea si falla la red
+    }
+}
+
+async function syncMovies() {
+    console.log("[MOVIE RADAR] Iniciando barrido en The Movie Database...");
+    
+    if (!TMDB_API_KEY || TMDB_API_KEY === 'tu_clave_de_tmdb_aqui') {
+        console.error("[MOVIE RADAR] Falta la TMDB_API_KEY válida en el entorno.");
+        return;
+    }
+
+    try {
+        // Obtiene a quién vigila
+        const watchersRes = await axios.get(`${API_BASE}/movies/watchers/`);
+        const watchers = watchersRes.data.filter(w => w.is_active);
+        
+        if (watchers.length === 0) {
+            console.log("[MOVIE RADAR] No hay directores ni sagas en la lista de vigilancia.");
+            return;
+        }
+
+        // Obtiene Wishlist actual para no guardar duplicados
+        const wishlistRes = await axios.get(`${API_BASE}/movies/wishlist/`);
+        const existingIds = wishlistRes.data.map(w => w.tmdb_id);
+        
+        // Define umbral de "Novedad" 
+        const currentYear = new Date().getFullYear();
+        const thresholdYear = currentYear - 1;
+
+        for (const watcher of watchers) {
+            console.log(`\n[MOVIE RADAR] Escaneando frecuencia: "${watcher.keyword}"`);
+            
+            // Busca la palabra clave en TMDB
+            const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(watcher.keyword)}&language=es-ES`;
+            const response = await axios.get(searchUrl);
+            const movies = response.data.results;
+
+            let foundNew = false;
+
+            for (const movie of movies) {
+                const releaseYear = movie.release_date ? parseInt(movie.release_date.substring(0, 4)) : 9999; // 9999 = TBA (To Be Announced)
+                
+                // Solo películas recientes/futuras y que no estén ya en la wishlist
+                if (releaseYear >= thresholdYear && !existingIds.includes(movie.id)) {
+                    console.log(`✨ [MOVIE RADAR] ¡Impacto detectado! -> ${movie.title} (${releaseYear === 9999 ? 'TBA' : releaseYear})`);
+                    
+                    // Inyecta el hallazgo al Bunker
+                    await axios.post(`${API_BASE}/movies/wishlist/`, {
+                        title: movie.title,
+                        release_year: releaseYear === 9999 ? 'TBA' : releaseYear.toString(),
+                        tmdb_id: movie.id,
+                        is_rejected: false
+                    });
+                    
+                    // Actualiza memoria local
+                    existingIds.push(movie.id);
+                    foundNew = true;
+                }
+            }
+            if (!foundNew) console.log(`   [MOVIE RADAR] Sin novedades para "${watcher.keyword}".`);
+        }
+        
+        console.log("\n[MOVIE RADAR] Barrido cinematográfico completado exitosamente.");
+
+    } catch (error) {
+        console.error("[MOVIE RADAR] Error de conexión con el satélite:", error.message);
     }
 }
 
@@ -60,7 +128,7 @@ function loadStrategies() {
     const strategies = [];
     const strategiesPath = path.join(__dirname, 'strategies');
     
-    // Leemos todos los archivos dentro de la carpeta 'strategies'
+    // Lee todos los archivos dentro de la carpeta 'strategies'
     if (fs.existsSync(strategiesPath)) {
         const files = fs.readdirSync(strategiesPath);
         for (const file of files) {
@@ -87,13 +155,13 @@ async function runScrapers(keywords) {
 
     console.log(`Iniciando vigilancia para: [ ${keywords.join(', ')} ]`);
     const strategies = loadStrategies();
-    let allReleases = []; // Aquí meteremos TODOS los libros de TODAS las webs
+    let allReleases = []; 
 
-    // 1. Recolectar lanzamientos de todas las editoriales (El Multiverso)
+    // Recolecta lanzamientos de todas las editoriales (El Multiverso)
     for (const strategy of strategies) {
         console.log(`\nConsultando a: ${strategy.name}...`);
         try {
-            // Le pasamos las palabras clave a la estrategia por si las necesita
+            // pasa las palabras clave a la estrategia
             const releases = await strategy.scrape(keywords); 
             allReleases = allReleases.concat(releases);
             console.log(`   ${releases.length} lanzamientos obtenidos de ${strategy.name}`);
@@ -102,18 +170,18 @@ async function runScrapers(keywords) {
         }
     }
 
-    // 2. Motor de Coincidencias Difusas (Fuzzy Matching)
+    // Motor Fuzzy Matching
     console.log(`\nAnalizando ${allReleases.length} libros encontrados en total...`);
     
     // fuse.js perdona errores ortográficos, símbolos extra (como "Vol. 13") y mayúsculas
     const fuseOptions = {
         keys: ['title'],
-        threshold: 0.3, // 0.0 es idéntico, 1.0 empareja cualquier cosa. 0.3 es el punto dulce para mangas/libros.
+        threshold: 0.3, // 0.0 es idéntico, 1.0 empareja cualquier cosa. 0.3 es el punto para mangas/libros.
         ignoreLocation: true
     };
     const fuse = new Fuse(allReleases, fuseOptions);
 
-    // 3. Evaluar cada palabra clave contra el universo de lanzamientos
+    // Evalua cada palabra clave contra el universo de lanzamientos
     for (const keyword of keywords) {
         const results = fuse.search(keyword);
         
@@ -137,11 +205,30 @@ async function runScrapers(keywords) {
     }
 }
 
-async function main() {
-    console.log("\n--- Iniciando ciclo de vigilancia ---");
+async function runAllRadars() {
+    console.log("==================================================");
+    console.log("INICIANDO SISTEMAS DE RASTREO DEL BUNKER");
+    console.log("==================================================");
+    
     const keywords = await getWatchers();
     await runScrapers(keywords);
-    console.log("--- Ciclo de vigilancia terminado ---\n");
+    
+    console.log("--------------------------------------------------");
+    
+    await syncMovies();
+    
+    console.log("==================================================");
+    console.log("Radares en reposo. Esperando próxima ventana...");
 }
 
-main();
+console.log("[SISTEMA] Esperando 15 segundos a que el Bunker (Django) esté en línea...");
+
+setTimeout(async () => {
+    // 2. Ejecutamos el primer barrido
+    await runAllRadars();
+    
+    // 3. Lo dejamos como un Demonio (Daemon) ejecutándose cada 12 horas
+    const DOCE_HORAS = 1000 * 60 * 60 * 12;
+    setInterval(runAllRadars, DOCE_HORAS);
+    
+}, 15000);

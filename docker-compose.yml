@@ -32,6 +32,8 @@ services:
 # --- Microservicio Node.js ---
   scraper:
     build: ./scraper # Busca el Dockerfile en la carpeta scraper
+    env_file:
+      - .env # Pasa la clave de TMDB al contenedor
     volumes:
       - ./scraper:/app # Sincroniza los archivos en vivo para desarrollo
       - /app/node_modules # Evita sobreescribir los módulos de Node del contenedor
