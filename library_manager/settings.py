@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django_filters',
     'catalog',
     'rest_framework',
+    'movies',
 ]
 
 MIDDLEWARE = [

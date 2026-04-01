@@ -1,3 +1,45 @@
 from django.db import models
 
-# Create your models here.
+
+class MovieDirectory(models.Model):
+    name = models.CharField(max_length=100)
+    color_hex = models.CharField(max_length=20, default="blue")
+
+    def __str__(self):
+        return self.name
+
+
+class Movie(models.Model):
+    FORMAT_CHOICES = [
+        ('DVD', 'DVD'),
+        ('BLU-RAY', 'Blu-ray'),
+        ('4K', '4K UHD'),
+        ('VHS', 'VHS'),
+        ('DIGITAL', 'Digital')
+    ]
+
+    title = models.CharField(max_length=255)
+    original_title = models.CharField(max_length=255, blank=True, null=True)
+    director = models.CharField(max_length=255, default="Desconocido")
+    cast = models.TextField(
+        blank=True, help_text="Reparto principal, separado por comas")
+
+    release_year = models.IntegerField(null=True, blank=True)
+    duration_minutes = models.IntegerField(null=True, blank=True)
+    format_type = models.CharField(
+        max_length=20, choices=FORMAT_CHOICES, default='BLU-RAY')
+
+    # Usa JSONField para guardar la lista de géneros fácilmente
+    genres = models.JSONField(default=list, blank=True)
+    synopsis = models.TextField(blank=True)
+    poster_url = models.URLField(blank=True, null=True)
+
+    is_watched = models.BooleanField(default=False)
+    is_loaned = models.BooleanField(default=False)
+
+    directory = models.ForeignKey(
+        MovieDirectory, null=True, blank=True, on_delete=models.SET_NULL, related_name='movies')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.title
