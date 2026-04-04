@@ -18,7 +18,7 @@ class LibraryMainScreen(Screen):
     CSS = """
     ModalScreen { 
         align: center middle; 
-        background: $background 50%; /* Oscurece el fondo suavemente */
+        background: $background 50%; 
     }
     Screen { background: $surface-darken-1; }
     DataTable { height: 1fr; margin: 1 2; }
