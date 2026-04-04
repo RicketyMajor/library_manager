@@ -13,6 +13,7 @@ from .modals import IsbnModal, FullEditModal, LendModal, DirModal, SyncConsoleMo
 
 class BunkerApp(App):
     all_books = []
+    theme = "gruvbox"
 
     CSS = """
     Screen { background: $surface-darken-1; }

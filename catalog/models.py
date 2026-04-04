@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
+from django.utils.timezone import localdate
 
 
 class Author(models.Model):
@@ -121,7 +122,7 @@ class WishlistItem(models.Model):
 
 class ReadingSession(models.Model):
     """Libro mayor de páginas leídas por día (Event Sourcing)"""
-    date = models.DateField(default=timezone.now)
+    date = models.DateField(default=localdate)
     pages_read = models.PositiveIntegerField()
 
     def __str__(self):
@@ -137,7 +138,7 @@ class AnnualRecord(models.Model):
                              null=True, blank=True, related_name='read_records')
 
     is_owned = models.BooleanField(default=True)
-    date_finished = models.DateField(default=timezone.now)
+    date_finished = models.DateField(default=localdate)
 
     def __str__(self):
         return f"{self.title} - Terminado el {self.date_finished}"

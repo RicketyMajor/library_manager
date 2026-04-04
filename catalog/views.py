@@ -10,6 +10,7 @@ from .serializers import BookSerializer, WatcherSerializer, WishlistItemSerializ
 from cli.api import fetch_book_by_isbn
 import django_filters
 from .serializers import ScanInboxSerializer
+from django.utils import timezone
 
 
 @api_view(['POST'])
@@ -239,7 +240,7 @@ def finish_book(request):
 @api_view(['GET'])
 def tracker_stats(request):
     """Calcula las métricas dinámicas del mes actual para el Centro de Mando"""
-    now = timezone.now()
+    now = timezone.localtime()
 
     # Suma las páginas, filtrando solo por el año y mes actuales
     mes_actual_sessions = ReadingSession.objects.filter(
