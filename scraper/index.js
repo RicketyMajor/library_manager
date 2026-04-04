@@ -3,26 +3,31 @@ const fs = require('fs');
 const path = require('path');
 const Fuse = require('fuse.js'); // El motor de coincidencias difusas
 
-const API_URL_WATCHERS = 'http://web:8000/api/books/watchers/';
-const API_URL_WISHLIST = 'http://web:8000/api/books/wishlist/add/';
+// Módulo Literario
+const API_BOOKS_WATCHERS = 'http://web:8000/api/books/watchers/';
+const API_BOOKS_WISHLIST = 'http://web:8000/api/books/wishlist/add/';
+
+// Módulo Cinematográfico
+const API_MOVIES_WATCHERS = 'http://web:8000/api/movies/watchers/';
+const API_MOVIES_WISHLIST = 'http://web:8000/api/movies/wishlist/';
 const API_BASE = 'http://web:8000/api'; // La IP interna de Docker
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 
-async function getWatchers() {
+
+async function getWatchers(url) {
     try {
-        const response = await axios.get(API_URL_WATCHERS);
-        return response.data.keywords || [];
+        const response = await axios.get(url);
+        return response.data.keywords || []; // En el futuro, ajusta según el JSON del Videoclub
     } catch (error) {
-        console.error("Error conectando con Django:", error.message);
+        console.error(`Error conectando con ${url}:`, error.message);
         return [];
     }
 }
-
-async function sendToWishlist(item) {
+async function sendToWishlist(item, targetUrl) {
     try {
-        const response = await axios.post(API_URL_WISHLIST, item);
+        const response = await axios.post(targetUrl, item);
         if (response.status === 201) {
-            console.log(`   > Guardado en Tablón: ${item.title} (${item.publisher})`);
+            console.log(`   > Guardado en Tablón: ${item.title}`);
         }
     } catch (error) {
         console.error(`   Error enviando '${item.title}':`, error.response?.data || error.message);
@@ -96,7 +101,7 @@ async function syncMovies() {
                 
                 // Solo películas recientes/futuras y que no estén ya en la wishlist
                 if (releaseYear >= thresholdYear && !existingIds.includes(movie.id)) {
-                    console.log(`✨ [MOVIE RADAR] ¡Impacto detectado! -> ${movie.title} (${releaseYear === 9999 ? 'TBA' : releaseYear})`);
+                    console.log(`[MOVIE RADAR] ¡Impacto detectado! -> ${movie.title} (${releaseYear === 9999 ? 'TBA' : releaseYear})`);
                     
                     // Inyecta el hallazgo al Bunker
                     await axios.post(`${API_BASE}/movies/wishlist/`, {
@@ -199,7 +204,7 @@ async function runScrapers(keywords) {
                 }
 
                 item.author_string = keyword;
-                await sendToWishlist(item);
+                await sendToWishlist(item, API_BOOKS_WISHLIST);
             }
         }
     }
@@ -210,12 +215,17 @@ async function runAllRadars() {
     console.log("INICIANDO SISTEMAS DE RASTREO DEL BUNKER");
     console.log("==================================================");
     
-    const keywords = await getWatchers();
-    await runScrapers(keywords);
+    // 1. Radar Literario
+    console.log("[RADAR] Escaneando novedades literarias...");
+    const bookKeywords = await getWatchers(API_BOOKS_WATCHERS);
+    await runScrapers(bookKeywords); 
     
     console.log("--------------------------------------------------");
     
-    await syncMovies();
+    // 2. Radar Cinematográfico
+    console.log("[RADAR] Consultando el oráculo de TMDB...");
+    const movieKeywords = await getWatchers(API_MOVIES_WATCHERS);
+    await syncMovies(movieKeywords, API_MOVIES_WISHLIST); 
     
     console.log("==================================================");
     console.log("Radares en reposo. Esperando próxima ventana...");
@@ -224,10 +234,10 @@ async function runAllRadars() {
 console.log("[SISTEMA] Esperando 15 segundos a que el Bunker (Django) esté en línea...");
 
 setTimeout(async () => {
-    // 2. Ejecutamos el primer barrido
+    // 2. Ejecuta el primer barrido
     await runAllRadars();
     
-    // 3. Lo dejamos como un Demonio (Daemon) ejecutándose cada 12 horas
+    // 3. ejecutándose cada 12 horas
     const DOCE_HORAS = 1000 * 60 * 60 * 12;
     setInterval(runAllRadars, DOCE_HORAS);
     

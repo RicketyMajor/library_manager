@@ -14,29 +14,29 @@ class MovieDetailsScreen(Screen):
 
     CSS = """
     #movie_root { padding: 1 2; }
-    #movie_header { 
-        border: heavy $warning; 
-        background: $surface; 
-        margin-bottom: 1; 
-        padding: 1 2; 
+    #movie_header {
+        border: heavy $warning;
+        background: $surface;
+        margin-bottom: 1;
+        padding: 1 2;
         align: center middle;
         content-align: center middle;
     }
-    
+
     #movie_title { text-style: bold; color: $text; }
     #movie_subtitle { color: $text-muted; margin-top: 1; }
 
-    #movie_grid { 
-        grid-size: 3; 
+    #movie_grid {
+        grid-size: 3;
         grid-columns: 1fr 2fr 2fr; /* Póster (1x) | Técnica (2x) | Cast & Sinopsis (2x) */
-        grid-gutter: 2; 
+        grid-gutter: 2;
     }
-    
+
     .movie_panel { border: heavy $accent; padding: 0 1; background: $surface; height: auto; }
-    
-    #poster_panel { 
-        border: double $success; 
-        text-align: center; 
+
+    #poster_panel {
+        border: double $success;
+        text-align: center;
         color: $text;
         height: 100%;
         content-align: center middle;
@@ -123,6 +123,7 @@ class MovieMainScreen(Screen):
     BINDINGS = [
         ("escape", "go_back", "Volver al Bunker"),
         ("d", "show_details", "Ver Ficha Cinematográfica"),
+        ("a", "add_movie", "Añadir Cinta"),
     ]
 
     CSS = """
@@ -179,3 +180,32 @@ class MovieMainScreen(Screen):
                 self.app.push_screen(MovieDetailsScreen(movie_id=row_key))
         except Exception:
             self.notify("Selecciona una película.", severity="warning")
+
+    def action_add_movie(self) -> None:
+        # Importamos un modal genérico para pedir texto (puedes crear uno específico luego)
+        from .modals import LendModal
+
+        def handle_title(title: str | None) -> None:
+            if title:
+                self.notify(
+                    f"Consultando TMDB para '{title}'...", title="Oráculo")
+                self.process_movie_scan(title)
+
+        self.app.push_screen(LendModal(), handle_title)
+
+    @work(thread=True)
+    def process_movie_scan(self, title: str) -> None:
+        try:
+            # Reemplaza la URL base si la tienes en constants.py
+            resp = httpx.post(
+                "http://localhost:8000/api/movies/scan/", json={"title": title}, timeout=10.0)
+            if resp.status_code == 201:
+                self.app.call_from_thread(
+                    self.notify, "¡Cinta archivada exitosamente!", title="Éxito")
+                self.app.call_from_thread(self.load_movies)
+            else:
+                self.app.call_from_thread(
+                    self.notify, f"Error: {resp.json().get('error')}", severity="error")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.notify, f"Error de red: {e}", severity="error")
