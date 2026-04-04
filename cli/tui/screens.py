@@ -160,20 +160,24 @@ class BunkerDashboardScreen(Screen):
     @work(thread=True)
     def fetch_global_stats(self) -> None:
         try:
-            # Consume el tracker de libros
-            books_stats = httpx.get(API_TRACKER, timeout=5.0).json()
+            # Extrae métricas literarias de forma segura
+            b_resp = httpx.get(API_TRACKER, timeout=5.0)
+            books_stats = b_resp.json() if b_resp.status_code == 200 else {}
 
-            # Consume el inventario de películas para calcular
-            movies_resp = httpx.get(API_MOVIES, timeout=5.0).json()
+            # Extrae métricas de cine de forma segura
+            m_resp = httpx.get(API_MOVIES, timeout=5.0)
+            movies_list = m_resp.json() if m_resp.status_code == 200 else []
+
+            # Cálculos
             movies_watched = len(
-                [m for m in movies_resp if m.get('is_watched')])
-            movies_total = len(movies_resp)
+                [m for m in movies_list if m.get('is_watched')])
+            movies_total = len(movies_list)
 
             self.app.call_from_thread(
                 self.render_dashboard, books_stats, movies_watched, movies_total)
         except Exception as e:
             self.app.call_from_thread(
-                self.notify, f"Error cargando el Centro de Mando: {e}", severity="error")
+                self.app.notify, f"Error cargando el Centro de Mando: {e}", severity="error")
 
     def render_dashboard(self, b_stats: dict, m_watched: int, m_total: int) -> None:
         # Render libros

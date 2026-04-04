@@ -16,11 +16,6 @@ class LibraryMainScreen(Screen):
     all_books = []
 
     CSS = """
-    ModalScreen { 
-        align: center middle; 
-        background: $background 50%; 
-    }
-    Screen { background: $surface-darken-1; }
     DataTable { height: 1fr; margin: 1 2; }
     #details_container { margin: 2 4; padding: 1 2; border: heavy $accent; background: $surface; }
 
@@ -35,42 +30,10 @@ class LibraryMainScreen(Screen):
         overflow-x: auto; 
     }
     #sidebar.-visible { display: block; }
-        
-    #full_edit_dialog { width: 80; height: 90%; padding: 1 2; border: heavy $warning; background: $surface; } 
-    .edit_label { text-style: bold; margin-top: 1; color: $text-muted; }
-    
-    #isbn_dialog, #lend_dialog, #dir_dialog, #watcher_dialog, #pages_dialog, #move_dir_dialog, #add_menu_dialog, #finish_dialog {
-        width: 45%; 
-        min-width: 45;
-        height: auto; 
-        padding: 1 2; 
-        border: heavy $accent; 
-        background: $surface; 
-    }
-
-    .modal_title { text-style: bold; margin-bottom: 1; text-align: center; width: 100%; }
-    .form_buttons { height: auto; width: 100%; margin-top: 1; align: center middle; }
-
-    #lend_dialog { border: heavy $success; }
 
     Button { margin: 0 1; }
     #tracker_content { height: auto; margin: 1 2 0 2; padding: 1; border: solid $success; background: $surface; }
     #annual_table { height: 1fr; margin: 0 2 1 2; }
-    #sync_dialog { width: 80%; height: 80%; padding: 1 2; border: heavy $success; background: $surface; }
-    
-    #sync_log { height: 1fr; border: solid $primary; background: #0c0c0c; }
-
-    #add_menu_dialog { width: 40; height: auto; padding: 1 2; border: heavy $accent; background: $surface; }
-    #add_menu_dialog Button { width: 100%; margin-bottom: 1; }
-
-    #scanner_dialog { width: 50; height: 35; padding: 1 2; border: heavy $success; background: $surface; }
-    #scanner_qr { height: 1fr; background: #000000; color: #ffffff; text-align: center; } 
-
-    #finish_dialog { width: 50; height: 22; padding: 1 2; border: heavy $warning; background: $surface; }
-    #watchers_list_dialog { width: 80; height: 25; padding: 1 2; border: heavy $accent; background: $surface; }
-    #watchers_scroll { height: 1fr; border: solid $primary; padding: 1; margin-bottom: 1; }
-
-    
     """
 
     BINDINGS = [
@@ -217,10 +180,8 @@ class LibraryMainScreen(Screen):
             for b in dir_books:
                 status = "✔" if b.get('is_read') else "✘"
                 # Formato: "ID - Título [Estado]"
-                title_short = b['title'][:25] + \
-                    "..." if len(b['title']) > 25 else b['title']
                 dir_node.add_leaf(
-                    f"[dim]{b['id']}[/dim] {title_short} [{status}]", data=f"book_{b['id']}")
+                    f"[dim]{b['id']}[/dim] {b['title']} [{status}]", data=f"book_{b['id']}")
 
     def populate_books(self, books: list) -> None:
         table = self.query_one("#books_table", DataTable)
