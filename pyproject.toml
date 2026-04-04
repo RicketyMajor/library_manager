@@ -10,6 +10,10 @@ dependencies = [
     "typer[all]",
     "httpx",
     "click-repl",
+    "textual",
+    "python-dotenv",
+    "qrcode",
+    "requests"
 ]
 
 [project.scripts]
