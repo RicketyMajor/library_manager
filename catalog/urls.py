@@ -27,7 +27,6 @@ urlpatterns = [
     path('tracker/pages/', log_pages, name='log-pages'),
     path('tracker/finish/', finish_book, name='finish-book'),
     path('tracker/stats/', tracker_stats, name='tracker-stats'),
-    path('api/movies/', include('movies.urls')),
 
     # Inyecta todas las rutas automáticas generadas por el router
     path('', include(router.urls)),

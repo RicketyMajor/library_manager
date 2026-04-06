@@ -93,10 +93,19 @@ def scan_book(request):
 
 
 def scanner_view(request):
-    """
-    Renderiza la interfaz web del escáner para dispositivos móviles.
-    """
-    return render(request, 'catalog/scanner.html')
+    """Renderiza el escáner QR. Acepta ?mode=book o ?mode=movie para decidir el destino."""
+    mode = request.GET.get('mode', 'book')
+
+    # Define la ruta de la API según el dominio
+    if mode == 'movie':
+        target_url = '/api/movies/receive-barcode/'
+    else:
+        target_url = '/api/books/inbox/'
+
+    return render(request, 'catalog/scanner.html', {
+        'target_url': target_url,
+        'mode': mode
+    })
 
 
 @api_view(['GET'])

@@ -70,3 +70,12 @@ class MovieWishlist(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class MovieInbox(models.Model):
+    barcode = models.CharField(max_length=255, unique=True)
+    title = models.CharField(max_length=255, null=True, blank=True)
+    date_scanned = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.barcode

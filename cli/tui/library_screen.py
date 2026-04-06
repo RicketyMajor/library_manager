@@ -5,6 +5,7 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Header, Footer, DataTable, Markdown, TabbedContent, Tree
 from textual.binding import Binding
+from textual.events import ScreenResume
 from .tabs import InventoryTab, InboxTab, LoansTab, TrackerTab, WishlistTab
 from textual import work
 from .constants import *
@@ -483,6 +484,18 @@ class LibraryMainScreen(Screen):
                 self.app.notify, f"Error: {e}", severity="error")
 
 # ================= INBOX =================
+
+    def on_screen_resume(self, event: ScreenResume) -> None:
+        """Refresca la biblioteca al volver de cualquier ventana emergente."""
+        self.load_all_data()  # O como se llame tu función de carga general de libros
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Devuelve a la vida la tecla Enter en las tablas."""
+        if event.control.id == "inbox_table":
+            self.action_process_inbox()
+        elif event.control.id == "books_table":
+            self.action_show_details()
+
     def action_process_inbox(self) -> None:
         if self.query_one("#main_tabs", TabbedContent).active != "tab_inbox":
             return

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Movie, MovieDirectory, MovieWatcher, MovieWishlist
+from .models import Movie, MovieDirectory, MovieInbox, MovieWatcher, MovieWishlist
 
 
 class MovieDirectorySerializer(serializers.ModelSerializer):
@@ -23,4 +23,10 @@ class MovieWatcherSerializer(serializers.ModelSerializer):
 class MovieWishlistSerializer(serializers.ModelSerializer):
     class Meta:
         model = MovieWishlist
+        fields = '__all__'
+
+
+class MovieInboxSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MovieInbox
         fields = '__all__'

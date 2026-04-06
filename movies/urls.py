@@ -1,6 +1,10 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import MovieViewSet, MovieDirectoryViewSet, MovieWatcherViewSet, MovieWishlistViewSet, scan_movie
+from .views import (
+    MovieViewSet, MovieDirectoryViewSet, MovieWatcherViewSet,
+    MovieWishlistViewSet, MovieInboxViewSet,
+    scan_movie, receive_barcode, process_barcode, movie_scanner_view
+)
 
 router = DefaultRouter()
 router.register(r'inventory', MovieViewSet, basename='movie')
@@ -8,8 +12,12 @@ router.register(r'directories', MovieDirectoryViewSet,
                 basename='movie-directory')
 router.register(r'watchers', MovieWatcherViewSet, basename='movie-watcher')
 router.register(r'wishlist', MovieWishlistViewSet, basename='movie-wishlist')
+router.register(r'inbox', MovieInboxViewSet, basename='movie-inbox')
 
 urlpatterns = [
     path('scan/', scan_movie, name='scan-movie'),
-    path('', include(router.urls)),
+    path('receive-barcode/', receive_barcode, name='receive-barcode'),
+    path('process-barcode/', process_barcode, name='process-barcode'),
+    path('scanner-web/', movie_scanner_view, name='movie-scanner-web'),
+    path('', include(router.urls)),  # Único include permitido aquí
 ]

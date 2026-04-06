@@ -82,23 +82,21 @@
 
       function onScanSuccess(decodedText, decodedResult) {
         const statusDiv = document.getElementById("status");
-        statusDiv.innerText =
-          "Enviando ISBN " + decodedText + " al servidor...";
+        statusDiv.innerHTML = `⏳ Procesando código: ${decodedText}...`;
         statusDiv.style.color = "#00d2ff";
 
         html5QrcodeScanner
           .clear()
           .then(() => {
             // Apunta al Purgatorio (inbox) en lugar de scan directo
-            fetch("/api/books/inbox/", {
+            // APUNTA AL INBOX DEL VIDEOCLUB
+            fetch("/api/movies/receive-barcode/", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "X-CSRFToken": csrfToken,
               },
-              body: JSON.stringify({
-                isbn: decodedText,
-              }),
+              // ENVÍA EL BARCODE EN LUGAR DEL ISBN
+              body: JSON.stringify({ barcode: decodedText }),
             })
               .then((response) =>
                 response
@@ -108,23 +106,23 @@
               .then((res) => {
                 if (res.status === 201 || res.status === 200) {
                   statusDiv.innerHTML = `
-                    ¡Capturado!<br>ISBN ${decodedText} enviado a la Bandeja de Entrada.<br>
+                    ¡Capturado!<br>Código EAN ${decodedText} enviado al Inbox del Videoclub.<br>
                     <button class="btn-restart" onclick="window.location.reload()">
-                      Escanear siguiente tomo
+                      Escanear siguiente película
                     </button>
                   `;
                   statusDiv.style.color = "#00ff00";
                 } else {
-                  let errMsg = res.body.isbn
-                    ? "Este ISBN ya está en la bandeja."
-                    : "Error desconocido.";
+                  let errMsg = res.body.barcode
+                    ? "Esta película ya está en el Inbox."
+                    : "El código fue guardado crudo (No encontrado en el comercio).";
                   statusDiv.innerHTML = `
-                    Error: ${errMsg}<br>
+                    Aviso: ${errMsg}<br>
                     <button class="btn-restart btn-error" onclick="window.location.reload()">
                       Intentar de nuevo
                     </button>
                   `;
-                  statusDiv.style.color = "#ff4444";
+                  statusDiv.style.color = "#ffcc00"; // Lo ponemos amarillo en lugar de rojo si es aviso
                 }
               })
               .catch((error) => {

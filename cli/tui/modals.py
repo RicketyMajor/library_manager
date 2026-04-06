@@ -1,9 +1,13 @@
 import re
+import os
+import asyncio.subprocess
+import qrcode
 import io
+import socket
 import asyncio
 from textual.app import ComposeResult
 from textual.screen import ModalScreen
-from textual.widgets import Input, Button, Label, Checkbox, RichLog, Select
+from textual.widgets import Input, Button, Label, Checkbox, RichLog, Select, Markdown
 from textual.containers import Vertical, Horizontal, VerticalScroll
 from pathlib import Path
 
@@ -386,6 +390,77 @@ class ScannerModal(ModalScreen[None]):
                 pass
 
 
+class MovieScannerModal(ModalScreen[None]):
+    """Modal ciberpunk que levanta un túnel SSH y dibuja el QR en ASCII."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="scanner_dialog"):
+            yield Label("Iniciando Escáner Móvil...", id="scanner_title", classes="modal_title")
+            yield RichLog(id="scanner_qr", markup=False, highlight=False)
+            yield Button("Cerrar Conexión Segura", variant="error", id="btn_cancel")
+
+    async def on_mount(self) -> None:
+        log = self.query_one("#scanner_qr", RichLog)
+        title = self.query_one("#scanner_title", Label)
+        log.write("Negociando túnel cifrado SSH con localhost.run...\n")
+
+        key_path = str(Path.home() / ".ssh" / "library_cli_key")
+        try:
+            # Levanta el túnel en background
+            self.tunnel_process = await asyncio.create_subprocess_exec(
+                "ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o",
+                "ServerAliveInterval=60", "-R", "80:localhost:8000", "nokey@localhost.run",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            # Inicia el lector de logs
+            asyncio.create_task(self.read_output(log, title))
+        except Exception as e:
+            log.write(f"Error crítico iniciando SSH: {e}")
+
+    async def read_output(self, log: RichLog, title: Label) -> None:
+        while True:
+            line = await self.tunnel_process.stdout.readline()
+            if not line:
+                break
+            text_line = line.decode().strip()
+
+            # Intercepta la URL segura
+            match = re.search(r"(https://[a-zA-Z0-9-]+\.lhr\.life)", text_line)
+            if match:
+                url = match.group(1) + "/api/movies/scanner-web/"
+                title.update(f"Escanea el QR o visita:\n{url}")
+                self.render_qr(url, log)
+                break  # Deja de leer la terminal para no saturar la pantalla
+
+    def render_qr(self, url: str, log: RichLog) -> None:
+        import qrcode
+        qr = qrcode.QRCode(version=1, box_size=1, border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+
+        # Engaña a qrcode para que imprima en una variable en vez de la consola real
+        f = io.StringIO()
+        qr.print_ascii(out=f, invert=True)
+
+        log.clear()
+        # Inyecta el QR renderizado en ASCII directo a nuestro Widget
+        log.write(f.getvalue())
+        log.write(
+            "\n[El servidor ya está escuchando. Escanea y presiona el botón abajo para terminar]")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(None)
+
+    def on_unmount(self) -> None:
+        # Si el usuario cierra el modal (con botón o ESC), matamos el proceso SSH
+        if hasattr(self, 'tunnel_process') and self.tunnel_process:
+            try:
+                self.tunnel_process.terminate()
+            except:
+                pass
+
+
 class FinishBookModal(ModalScreen[dict]):
     """Diálogo para registrar un libro como terminado en el año."""
 
@@ -469,5 +544,27 @@ class MoveToDirModal(ModalScreen[str]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_move":
             self.dismiss(self.query_one("#sel_dest", Select).value)
+        else:
+            self.dismiss("cancel")
+
+
+class AddMovieMenuModal(ModalScreen[str]):
+    """Las 3 vías de ingreso al Videoclub."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="add_menu_dialog"):
+            yield Label("⌨ Añadir Película", classes="modal_title")
+            yield Button("1. Escanear Código de Barras (Celular)", id="btn_scan", variant="primary")
+            yield Button("2. Ingresar Nombre (Búsqueda TMDB)", id="btn_manual_name", variant="warning")
+            yield Button("3. Ingreso 100% Manual (Ficha)", id="btn_full_manual", variant="success")
+            yield Button("Cancelar", id="btn_cancel", variant="error")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_scan":
+            self.dismiss("scan")
+        elif event.button.id == "btn_manual_name":
+            self.dismiss("name")
+        elif event.button.id == "btn_full_manual":
+            self.dismiss("full")
         else:
             self.dismiss("cancel")
