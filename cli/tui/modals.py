@@ -10,6 +10,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, Button, Label, Checkbox, RichLog, Select, Markdown
 from textual.containers import Vertical, Horizontal, VerticalScroll
 from pathlib import Path
+from textual import work
 
 
 class IsbnModal(ModalScreen[str]):
@@ -136,49 +137,64 @@ class DirModal(ModalScreen[dict]):
             self.dismiss(None)
 
 
-class SyncConsoleModal(ModalScreen[None]):
-    """La Terminal de Matrix: Ejecuta el Scraper Dockerizado en vivo."""
+class SyncConsoleModal(ModalScreen):
+    """Terminal emulada para ejecutar scrapers de forma dinámica."""
 
+    # Añade service_name con valor por defecto para no romper la Biblioteca
     def __init__(self, service_name: str = "scraper-books", **kwargs):
         super().__init__(**kwargs)
         self.service_name = service_name
 
     def compose(self) -> ComposeResult:
         with Vertical(id="sync_dialog"):
-            yield Label(f"Matrix Scraper Network [{self.service_name}]", classes="modal_title")
+            yield Label(f"Terminal de Sincronización: {self.service_name.upper()}", classes="modal_title")
             yield RichLog(id="sync_log", highlight=True, markup=True)
-            yield Button("Cerrar Conexión", variant="error", id="btn_cancel")
+            with Horizontal(classes="form_buttons"):
+                yield Button("Cerrar Conexión", variant="error", id="btn_close")
 
-    async def on_mount(self) -> None:
+    def on_mount(self) -> None:
+        self.run_sync()
+
+    @work(thread=True)
+    def run_sync(self) -> None:
         log = self.query_one("#sync_log", RichLog)
         log.write(
-            f"[bold cyan]Iniciando rastreo web en {self.service_name}...[/bold cyan]")
+            f"[bold green]Iniciando enlace con contenedor {self.service_name}...[/bold green]")
 
-        project_dir = Path(__file__).resolve().parent.parent.parent
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        compose_file = str(base_dir / "docker-compose.yml")
+
+        # Inyectamos Node directo con la bandera --manual
+        if self.service_name == "scraper-movies":
+            cmd = ["docker-compose", "-f", compose_file, "exec", "-T",
+                   "scraper-movies", "node", "movie_radar.js", "--manual"]
+        else:
+            cmd = ["docker-compose", "-f", compose_file, "exec", "-T",
+                   "scraper-books", "node", "book_radar.js", "--manual"]
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                "docker-compose", "run", "--rm", self.service_name,
-                cwd=str(project_dir),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+            import subprocess
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
             )
-            asyncio.create_task(self.read_output(process, log))
-        except Exception as e:
-            log.write(f"[bold red]Error iniciando el sabueso: {e}[/bold red]")
 
-    async def read_output(self, process, log):
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                break
-            log.write(line.decode().rstrip())
-        await process.wait()
-        log.write(
-            "\n[bold green]Rastreo finalizado. Puedes cerrar esta ventana.[/bold green]")
+            for line in process.stdout:
+                self.app.call_from_thread(log.write, line.strip())
+
+            process.wait()
+            self.app.call_from_thread(
+                log.write, "[bold cyan]--- TRANSMISIÓN FINALIZADA ---[/bold cyan]")
+        except Exception as e:
+            self.app.call_from_thread(
+                log.write, f"[bold red]Error crítico de sistema:[/bold red] {e}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.dismiss(None)
+        if event.button.id == "btn_close":
+            self.dismiss(None)
 
 
 class WatcherModal(ModalScreen[str]):

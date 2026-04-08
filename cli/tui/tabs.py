@@ -78,3 +78,17 @@ class MovieTrackerTab(TabPane):
         with Vertical():
             yield Markdown("Cargando métricas cinematográficas...", id="movie_tracker_content")
             yield DataTable(id="movie_annual_table")
+
+
+class MovieWishlistTab(TabPane):
+    """Pestaña 5: El radar del Scraper para el Videoclub."""
+    BINDINGS = [
+        ("s", "screen.sync_scraper", "Sincronizar Scraper"),
+        ("w", "screen.add_watcher", "Vigilar Director/Saga"),
+        ("v", "screen.view_watchers", "Ver/Borrar Vigilados"),
+        ("x", "screen.delete_wishlist", "Ocultar Lanzamiento"),
+        ("c", "screen.clear_wishlist", "Limpiar Todo"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield DataTable(id="movie_wishlist_table")

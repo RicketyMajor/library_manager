@@ -103,8 +103,13 @@ async function startRadar() {
     console.log("\n[RADAR LITERARIO] En reposo. Esperando próxima ventana de 12 horas.");
 }
 
-console.log("[RADAR LITERARIO] Esperando inicio del servidor central...");
-setTimeout(async () => {
-    await startRadar();
-    setInterval(startRadar, 1000 * 60 * 60 * 12);
-}, 15000);
+if (process.argv.includes('--manual')) {
+    console.log("[RADAR LITERARIO] Ejecución de escaneo manual iniciada.");
+    startRadar().then(() => process.exit(0));
+} else {
+    console.log("[RADAR LITERARIO] Servidor automático en línea (Ciclo: 12 horas).");
+    setTimeout(async () => {
+        await startRadar();
+        setInterval(startRadar, 1000 * 60 * 60 * 12);
+    }, 5000);
+}

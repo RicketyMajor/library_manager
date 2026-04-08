@@ -114,7 +114,7 @@ def wishlist_details(item_id: int = typer.Argument(..., help="ID del lanzamiento
     try:
         response = httpx.get(f"{API_WISHLIST}{item_id}/")
         if response.status_code == 404:
-            console.print("[bold red]❌ Lanzamiento no encontrado.[/bold red]")
+            console.print("[bold red]Lanzamiento no encontrado.[/bold red]")
             return
 
         item = response.json()

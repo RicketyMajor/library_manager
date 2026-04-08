@@ -32,9 +32,30 @@ class MovieWatcherViewSet(viewsets.ModelViewSet):
 
 
 class MovieWishlistViewSet(viewsets.ModelViewSet):
+    # El queryset por defecto asegura que el GET solo muestre los no rechazados
     queryset = MovieWishlist.objects.filter(
         is_rejected=False).order_by('-date_found')
     serializer_class = MovieWishlistSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Sobreescritura del método POST para garantizar la idempotencia."""
+        title = request.data.get('title')
+
+        if title:
+            # Us .objects sin el filtro de is_rejected y __iexact para ignorar mayúsculas
+            # Así revisa si existe en el Tablón activo O en la lista negra.
+            exists = MovieWishlist.objects.filter(title__iexact=title).exists()
+            if exists:
+                # Devolvuelve un 200 OK pero no guarda nada.
+                # Al devolver 200, el scraper de Node.js no lanza error y sigue trabajando,
+                # pero la base de datos se mantiene sin de duplicados y zombis.
+                return Response(
+                    {"message": f"'{title}' ya está en el radar o fue rechazada. Ignorando."},
+                    status=status.HTTP_200_OK
+                )
+
+        # Si es genuinamente nueva, deja     que Django haga el flujo de guardado normal
+        return super().create(request, *args, **kwargs)
 
 
 @api_view(['POST'])

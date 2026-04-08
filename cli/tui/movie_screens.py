@@ -6,8 +6,9 @@ from textual.widgets import Header, Footer, Markdown, DataTable, Label, TabbedCo
 from textual.containers import VerticalScroll, Vertical, Grid
 from textual.binding import Binding
 from textual import work
-from .constants import API_MOVIES, API_MOVIE_INBOX, API_MOVIE_PROCESS, API_MOVIE_DIRS, API_MOVIE_TRACKER, API_MOVIE_TRACKER_ANNUAL, API_MOVIE_TRACKER_MINUTES, API_MOVIE_TRACKER_FINISH
-from .modals import AddMovieMenuModal, MovieScannerModal, LendModal, ConfirmModal, ManualMovieAddModal, DirModal, MoveToDirModal, DeleteDirModal, LogMinutesModal, FinishMovieModal
+from .constants import API_MOVIES, API_MOVIE_INBOX, API_MOVIE_PROCESS, API_MOVIE_DIRS, API_MOVIE_TRACKER, API_MOVIE_TRACKER_ANNUAL, API_MOVIE_TRACKER_MINUTES, API_MOVIE_TRACKER_FINISH, API_MOVIE_WATCHERS, API_MOVIE_WISHLIST
+from .modals import AddMovieMenuModal, MovieScannerModal, LendModal, ConfirmModal, ManualMovieAddModal, DirModal, MoveToDirModal, DeleteDirModal, LogMinutesModal, FinishMovieModal, SyncConsoleModal, WatcherModal, WatchersListModal
+from .tabs import MovieWishlistTab
 
 
 class MovieInventoryTab(TabPane):
@@ -135,6 +136,7 @@ class MovieMainScreen(Screen):
         Binding("3", "switch_tab('tab_prestamos')", "Préstamos", show=False),
         Binding("4", "switch_tab('tab_tracker')",
                 "Hábitos", show=False),
+        Binding("5", "switch_tab('tab_wishlist')", "Tablón", show=False),
     ]
 
     CSS = """
@@ -161,6 +163,7 @@ class MovieMainScreen(Screen):
             yield MovieInboxTab("◈ Inbox", id="tab_inbox")
             yield MovieLoansTab("⇋ Préstamos", id="tab_prestamos")
             yield MovieTrackerTab("∑ Hábitos", id="tab_tracker")
+            yield MovieWishlistTab("★ Tablón", id="tab_wishlist")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -184,6 +187,12 @@ class MovieMainScreen(Screen):
         t_annual.zebra_stripes = True
         t_annual.add_columns("ID", "Título", "Director",
                              "Propiedad", "Visto El")
+
+        t_wishlist = self.query_one("#movie_wishlist_table", DataTable)
+        t_wishlist.cursor_type = "row"
+        t_wishlist.zebra_stripes = True
+        t_wishlist.add_columns("ID", "Título de Lanzamiento",
+                               "Director/Saga", "Año Est.", "Encontrado")
 
         self.title = "BUNKER"
         self.sub_title = "Módulo de Videoclub"
@@ -226,6 +235,14 @@ class MovieMainScreen(Screen):
             if isinstance(tracker, dict):
                 self.app.call_from_thread(
                     self.populate_tracker, tracker, annual)
+        except Exception:
+            pass
+
+        # Cargar Wishlist
+        try:
+            wishlist = httpx.get(API_MOVIE_WISHLIST, timeout=5.0).json()
+            if isinstance(wishlist, list):
+                self.app.call_from_thread(self.populate_wishlist, wishlist)
         except Exception:
             pass
 
@@ -720,3 +737,121 @@ class MovieMainScreen(Screen):
         except Exception as e:
             self.app.call_from_thread(
                 self.app.notify, f"Error: {e}", severity="error")
+
+    # ================= WISHLIST & RADAR (SCRAPER) =================
+    def action_sync_scraper(self) -> None:
+        if self.query_one("#movie_tabs", TabbedContent).active != "tab_wishlist":
+            return
+        # Llama al contenedor Node.js de las películas
+        self.app.push_screen(SyncConsoleModal(service_name="scraper-movies"))
+
+    def action_add_watcher(self) -> None:
+        if self.query_one("#movie_tabs", TabbedContent).active != "tab_wishlist":
+            return
+
+        def do_watch(keyword: str | None) -> None:
+            if keyword:
+                self.process_add_watcher(keyword)
+        self.app.push_screen(WatcherModal(), do_watch)
+
+    @work(thread=True)
+    def process_add_watcher(self, keyword: str) -> None:
+        try:
+            if httpx.post(API_MOVIE_WATCHERS, json={"keyword": keyword, "is_active": True}, timeout=5.0).status_code == 201:
+                self.app.call_from_thread(
+                    self.app.notify, f"Vigilando: {keyword}", title="Radar Activado")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, f"Error: {e}", severity="error")
+
+    def action_view_watchers(self) -> None:
+        if self.query_one("#movie_tabs", TabbedContent).active != "tab_wishlist":
+            return
+        self.app.notify("Consultando base de datos...", timeout=1)
+        self.fetch_and_show_watchers()
+
+    @work(thread=True)
+    def fetch_and_show_watchers(self) -> None:
+        try:
+            watchers = httpx.get(API_MOVIE_WATCHERS, timeout=5.0).json()
+
+            def do_delete_watcher(w_id: int | None) -> None:
+                if w_id:
+                    self.process_delete_watcher(w_id)
+            self.app.call_from_thread(
+                self.app.push_screen, WatchersListModal(watchers), do_delete_watcher)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, f"Error: {e}", severity="error")
+
+    @work(thread=True)
+    def process_delete_watcher(self, watcher_id: int) -> None:
+        try:
+            if httpx.delete(f"{API_MOVIE_WATCHERS}{watcher_id}/", timeout=5.0).status_code == 204:
+                self.app.call_from_thread(
+                    self.app.notify, "Objetivo eliminado del radar.", title="Éxito")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, f"Error: {e}", severity="error")
+
+    def action_delete_wishlist(self) -> None:
+        if self.query_one("#movie_tabs", TabbedContent).active != "tab_wishlist":
+            return
+        table = self.query_one("#movie_wishlist_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key.value
+            if row_key:
+                def check_delete(confirm: bool | None) -> None:
+                    if confirm:
+                        self.process_delete_wishlist(row_key)
+                self.app.push_screen(ConfirmModal(
+                    "¿Añadir a la lista negra del scraper?"), check_delete)
+        except Exception:
+            self.app.notify("Selecciona un lanzamiento.", severity="warning")
+
+    @work(thread=True)
+    def process_delete_wishlist(self, item_id: str) -> None:
+        try:
+            if httpx.patch(f"{API_MOVIE_WISHLIST}{item_id}/", json={"is_rejected": True}, timeout=5.0).status_code == 200:
+                self.app.call_from_thread(
+                    self.app.notify, "Lanzamiento oculto para siempre.", title="Éxito")
+                self.app.call_from_thread(self.load_movies)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, f"Error: {e}", severity="error")
+
+    def action_clear_wishlist(self) -> None:
+        if self.query_one("#movie_tabs", TabbedContent).active != "tab_wishlist":
+            return
+
+        def do_clear(confirm: bool | None) -> None:
+            if confirm:
+                self.process_clear_wishlist()
+        self.app.push_screen(ConfirmModal(
+            "¿Ocultar TODOS los lanzamientos del tablón?"), do_clear)
+
+    @work(thread=True)
+    def process_clear_wishlist(self) -> None:
+        try:
+            items = httpx.get(API_MOVIE_WISHLIST, timeout=5.0).json()
+            for item in items:
+                httpx.patch(
+                    f"{API_MOVIE_WISHLIST}{item['id']}/", json={"is_rejected": True}, timeout=5.0)
+            self.app.call_from_thread(
+                self.app.notify, f"{len(items)} lanzamientos enviados a lista negra.", title="Limpieza")
+            self.app.call_from_thread(self.load_movies)
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, f"Error: {e}", severity="error")
+
+    def populate_wishlist(self, items: list) -> None:
+        table = self.query_one("#movie_wishlist_table", DataTable)
+        table.clear()
+        for item in items:
+            date_str = item.get('date_found', '')[:10]
+            table.add_row(
+                str(item.get('id')), item.get('title', '').upper(),
+                item.get('director') or "-", item.get('release_year') or "-",
+                date_str, key=str(item.get('id'))
+            )
