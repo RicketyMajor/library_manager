@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.timezone import localdate
 
 
 class MovieDirectory(models.Model):
@@ -80,3 +81,27 @@ class MovieInbox(models.Model):
 
     def __str__(self):
         return self.barcode
+
+
+class MovieViewingSession(models.Model):
+    """Libro mayor de minutos vistos por día (Event Sourcing)"""
+    date = models.DateField(default=localdate)
+    minutes_watched = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"{self.date}: {self.minutes_watched} minutos"
+
+
+class MovieAnnualRecord(models.Model):
+    """Registro histórico inmutable de películas vistas"""
+    title = models.CharField(max_length=255)
+    director = models.CharField(max_length=255, blank=True, null=True)
+
+    movie = models.ForeignKey(Movie, on_delete=models.SET_NULL,
+                              null=True, blank=True, related_name='watch_records')
+
+    is_owned = models.BooleanField(default=True)
+    date_watched = models.DateField(default=localdate)
+
+    def __str__(self):
+        return f"{self.title} - Vista el {self.date_watched}"

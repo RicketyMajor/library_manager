@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     MovieViewSet, MovieDirectoryViewSet, MovieWatcherViewSet,
     MovieWishlistViewSet, MovieInboxViewSet,
-    scan_movie, receive_barcode, process_barcode, movie_scanner_view
+    scan_movie, receive_barcode, process_barcode, movie_scanner_view,
+    tracker_stats, tracker_annual, log_minutes, finish_movie
 )
 
 router = DefaultRouter()
@@ -19,5 +20,9 @@ urlpatterns = [
     path('receive-barcode/', receive_barcode, name='receive-barcode'),
     path('process-barcode/', process_barcode, name='process-barcode'),
     path('scanner-web/', movie_scanner_view, name='movie-scanner-web'),
-    path('', include(router.urls)),  # Único include permitido aquí
+    path('tracker/stats/', tracker_stats, name='movie-tracker-stats'),
+    path('tracker/annual/', tracker_annual, name='movie-tracker-annual'),
+    path('tracker/minutes/', log_minutes, name='movie-log-minutes'),
+    path('tracker/finish/', finish_movie, name='movie-finish'),
+    path('', include(router.urls)),
 ]

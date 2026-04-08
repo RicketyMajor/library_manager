@@ -19,5 +19,10 @@ API_MOVIE_PROCESS = "http://localhost:8000/api/movies/process-barcode/"
 API_MOVIE_SCAN = "http://localhost:8000/api/movies/scan/"
 API_MOVIE_WATCHERS = "http://localhost:8000/api/movies/watchers/"
 API_MOVIE_WISHLIST = "http://localhost:8000/api/movies/wishlist/"
+# API para el tracker de películas
+API_MOVIE_TRACKER = "http://localhost:8000/api/movies/tracker/stats/"
+API_MOVIE_TRACKER_ANNUAL = "http://localhost:8000/api/movies/tracker/annual/"
+API_MOVIE_TRACKER_MINUTES = "http://localhost:8000/api/movies/tracker/minutes/"
+API_MOVIE_TRACKER_FINISH = "http://localhost:8000/api/movies/tracker/finish/"
 
 API_DASHBOARD = "http://localhost:8000/api/dashboard/"

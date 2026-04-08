@@ -65,3 +65,16 @@ class WishlistTab(TabPane):
 
     def compose(self) -> ComposeResult:
         yield DataTable(id="wishlist_table")
+
+
+class MovieTrackerTab(TabPane):
+    """Pestaña de Hábitos para el Videoclub."""
+    BINDINGS = [
+        ("m", "screen.log_minutes", "Anotar Minutos"),
+        ("f", "screen.finish_movie", "Registrar Película Vista"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Markdown("Cargando métricas cinematográficas...", id="movie_tracker_content")
+            yield DataTable(id="movie_annual_table")

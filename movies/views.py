@@ -5,11 +5,13 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rich.markup import render
-from .models import Movie, MovieDirectory, MovieWatcher, MovieWishlist, MovieInbox
+from .models import Movie, MovieDirectory, MovieWatcher, MovieWishlist, MovieInbox, MovieViewingSession, MovieAnnualRecord
 from .serializers import MovieSerializer, MovieDirectorySerializer, MovieWatcherSerializer, MovieWishlistSerializer, MovieInboxSerializer
 from .tmdb_oracle import search_movie_tmdb
 from .omdb_oracle import search_movie_omdb
 from django.shortcuts import render
+from django.db.models import Sum
+from django.utils import timezone
 
 BARCODE_LOOKUP_KEY = os.getenv("BARCODE_LOOKUP_KEY", "")
 
@@ -228,3 +230,73 @@ def process_barcode(request):
 def movie_scanner_view(request):
     """Renderiza el escáner QR aislado exclusivamente para películas."""
     return render(request, 'movies/movie_scanner.html')
+
+# ================= TRACKER Y HÁBITOS (VIDEOCLUB) =================
+
+
+@api_view(['GET'])
+def tracker_stats(request):
+    """Devuelve las estadísticas del mes en curso."""
+    today = timezone.localdate()
+    start_of_month = today.replace(day=1)
+
+    sessions = MovieViewingSession.objects.filter(
+        date__gte=start_of_month, date__lte=today)
+    total_minutes = sessions.aggregate(Sum('minutes_watched'))[
+        'minutes_watched__sum'] or 0
+
+    return Response({
+        "current_month": today.strftime("%B").capitalize(),
+        "minutes_this_month": total_minutes
+    })
+
+
+@api_view(['GET'])
+def tracker_annual(request):
+    """Devuelve el historial inmutable de películas vistas este año."""
+    today = timezone.localdate()
+    start_of_year = today.replace(month=1, day=1)
+
+    records = MovieAnnualRecord.objects.filter(
+        date_watched__gte=start_of_year).order_by('-date_watched', '-id')
+
+    data = [
+        {
+            "id": r.id,
+            "title": r.title,
+            "director": r.director or "Desconocido",
+            "is_owned": r.is_owned,
+            "date_watched": r.date_watched.strftime("%Y-%m-%d")
+        } for r in records
+    ]
+    return Response(data)
+
+
+@api_view(['POST'])
+def log_minutes(request):
+    """Anota minutos vistos en el día actual."""
+    minutes = request.data.get('minutes')
+    if not minutes:
+        return Response({"error": "Faltan los minutos."}, status=status.HTTP_400_BAD_REQUEST)
+
+    MovieViewingSession.objects.create(minutes_watched=int(minutes))
+    return Response({"message": f"Anotados {minutes} minutos de visionado."}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+def finish_movie(request):
+    """Registra una película como 'Vista' en el Muro de la Fama."""
+    title = request.data.get('title')
+    director = request.data.get('director', 'Desconocido')
+    is_owned = request.data.get('is_owned', True)
+
+    if not title:
+        return Response({"error": "Falta el título."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Guarda en el registro inmutable
+    MovieAnnualRecord.objects.create(
+        title=title,
+        director=director,
+        is_owned=is_owned
+    )
+    return Response({"message": "Película añadida al historial anual."}, status=status.HTTP_201_CREATED)
