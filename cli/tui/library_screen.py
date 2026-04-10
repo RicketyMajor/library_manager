@@ -22,8 +22,8 @@ class LibraryMainScreen(Screen):
 
     #sidebar {
         dock: left; 
-        width: 35; 
-        max-width: 50%;
+        width: 45;
+        max-width: 60%;
         height: 100%;
         background: $surface-darken-2; 
         border-right: vkey $background;
@@ -31,6 +31,7 @@ class LibraryMainScreen(Screen):
         overflow-x: auto; 
     }
     #sidebar.-visible { display: block; }
+    Tree { overflow-x: auto; } 
 
     Button { margin: 0 1; }
     #tracker_content { height: auto; margin: 1 2 0 2; padding: 1; border: solid $success; background: $surface; }
@@ -42,7 +43,6 @@ class LibraryMainScreen(Screen):
         ("q", "quit", "Salir"),
         ("ctrl+b", "toggle_sidebar", "Explorador"),
         ("ctrl+t", "toggle_dark", "Tema"),
-        ("shift+x", "action_delete_dir", "Borrar Carpeta"),
         Binding("1", "switch_tab('tab_library')",
                 "1-5 Cambiar Pestañas", show=True),
         Binding("2", "switch_tab('tab_inbox')", "Inbox", show=False),
@@ -173,7 +173,7 @@ class LibraryMainScreen(Screen):
         tree.root.data = "root"
         tree.clear()
 
-        self.all_dirs = dirs  # Guarda en memoria para usarlo luego al Mover
+        self.all_dirs = dirs
 
         for d in dirs:
             dir_books = [b for b in self.all_books if b.get(
@@ -181,15 +181,16 @@ class LibraryMainScreen(Screen):
             count = len(dir_books)
             node_label = f"[{d.get('color_hex', 'cyan')}]■ {d['name']}[/] [dim]({count})[/dim]"
 
-            # Añade la carpeta
             dir_node = tree.root.add(node_label, data=d['id'])
-
-            # Añade los libros como "Hojas" dentro de la carpeta
             for b in dir_books:
                 status = "✔" if b.get('is_read') else "✘"
-                # Formato: "ID - Título [Estado]"
+
+                raw_title = b.get('title', '')
+                short_title = raw_title[:25] + \
+                    "..." if len(raw_title) > 25 else raw_title
+
                 dir_node.add_leaf(
-                    f"[dim]{b['id']}[/dim] {b['title']} [{status}]", data=f"book_{b['id']}")
+                    f"[dim]{b['id']}[/dim] {short_title} [{status}]", data=f"book_{b['id']}")
 
     def populate_books(self, books: list) -> None:
         table = self.query_one("#books_table", DataTable)
@@ -569,15 +570,15 @@ class LibraryMainScreen(Screen):
     @work(thread=True)
     def process_finish_book(self, payload: dict) -> None:
         try:
-            # 1. Registramos en el Tracker
+            # Registra en el Tracker
             resp = httpx.post(API_TRACKER_FINISH, json=payload, timeout=5.0)
             if resp.status_code == 201:
-                # 2. TRANSACCIÓN DISTRIBUIDA: Buscamos si el libro existe en Inventario
+                # Busca si el libro existe en Inventario
                 lib_resp = httpx.get(API_LIBRARY, params={
                                      "title": payload['title']}, timeout=5.0)
                 if lib_resp.status_code == 200 and lib_resp.json():
                     book_id = lib_resp.json()[0]['id']
-                    # 3. Lo marcamos como leído automáticamente!
+                    # Lo marca como leído automáticamente!
                     httpx.patch(f"{API_LIBRARY}{book_id}/",
                                 json={"is_read": True}, timeout=5.0)
 
@@ -657,7 +658,10 @@ class LibraryMainScreen(Screen):
         def do_watch(keyword: str | None) -> None:
             if keyword:
                 self.process_add_watcher(keyword)
-        self.app.push_screen(WatcherModal(), do_watch)
+
+        # Le pasamos los parámetros específicos de Libros
+        self.app.push_screen(WatcherModal(
+            "Vigilar Autor/Saga", "Ej: Tatsuki Fujimoto"), do_watch)
 
     @work(thread=True)
     def process_add_watcher(self, keyword: str) -> None:
@@ -825,57 +829,26 @@ class LibraryMainScreen(Screen):
 
     # ================= ELIMINAR DIRECTORIOS =================
     def action_delete_dir(self) -> None:
-        sidebar = self.query_one("#sidebar", Tree)
+        # Solo funciona si estamos en la pestaña de Inventario
+        if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
+            return
 
-        # navegando por el Ctrl+B
-        if sidebar.has_focus:
-            selected_node = sidebar.cursor_node
-            if not selected_node or selected_node.data is None:
-                return
+        def do_select(dir_id: str) -> None:
+            if dir_id != "cancel" and dir_id is not None:
+                dir_name = next((d['name'] for d in getattr(
+                    self, 'all_dirs', []) if str(d['id']) == dir_id), "Directorio")
 
-            data_val = str(selected_node.data)
+                def do_confirm(confirm: bool) -> None:
+                    if confirm:
+                        self.process_delete_dir(dir_id)
 
-            # contra borrado de raíz o archivos
-            if data_val == "root":
-                self.app.notify(
-                    "Eso no se puede hacer. La raíz es inamovible.", severity="error")
-                return
-            if data_val.startswith("book_"):
-                self.app.notify(
-                    "Debes seleccionar una carpeta, no un archivo.", severity="warning")
-                return
+                # Doble validación: Modal de selección -> Modal de confirmación
+                self.app.push_screen(ConfirmModal(
+                    f"¿Seguro que deseas destruir '{dir_name}'?"), do_confirm)
 
-            dir_id = data_val
-            dir_name = next((d['name'] for d in getattr(
-                self, 'all_dirs', []) if str(d['id']) == dir_id), "Directorio")
-
-            def do_confirm_tree(confirm: bool) -> None:
-                if confirm:
-                    self.process_delete_dir(dir_id)
-
-            self.app.push_screen(ConfirmModal(
-                f"¿Seguro que deseas destruir la carpeta '{dir_name}'?"), do_confirm_tree)
-
-        # la tabla normal
-        else:
-            if self.query_one("#main_tabs", TabbedContent).active != "tab_library":
-                return
-
-            # Usa la lista desplegable segura y luego pide confirmación
-            def do_select(dir_id: str) -> None:
-                if dir_id != "cancel" and dir_id is not None:
-                    dir_name = next((d['name'] for d in getattr(
-                        self, 'all_dirs', []) if str(d['id']) == dir_id), "Directorio")
-
-                    def do_confirm_table(confirm: bool) -> None:
-                        if confirm:
-                            self.process_delete_dir(dir_id)
-
-                    self.app.push_screen(ConfirmModal(
-                        f"¿Seguro que deseas destruir '{dir_name}'?"), do_confirm_table)
-
-            self.app.push_screen(DeleteDirModal(
-                getattr(self, 'all_dirs', [])), do_select)
+        # Invocamos el nuevo modal de selección
+        self.app.push_screen(DeleteDirModal(
+            getattr(self, 'all_dirs', [])), do_select)
 
     @work(thread=True)
     def process_delete_dir(self, dir_id: str) -> None:

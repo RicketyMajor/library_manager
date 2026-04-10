@@ -18,8 +18,8 @@ class MovieInventoryTab(TabPane):
         ("l", "screen.lend_movie", "Prestar a Amigo"),
         ("m", "screen.move_movie", "Mover a Carpeta"),
         ("c", "screen.create_dir", "Crear Carpeta"),
+        ("D", "screen.delete_dir", "Borrar Carpeta"),
         ("x", "screen.delete_movie", "Eliminar Ficha"),
-        ("shift+x", "screen.delete_dir", "Borrar Carpeta"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -130,7 +130,7 @@ class MovieMainScreen(Screen):
         ("escape", "go_back", "Volver al Launcher"),
         ("q", "quit", "Salir"),
         ("ctrl+b", "toggle_sidebar", "Explorador"),
-        ("shift+x", "action_delete_dir", "Borrar Carpeta"),
+        ("M", "action_move_movie", "Mover a Carpeta"),
         Binding("1", "switch_tab('tab_cartelera')", "1-4 Pestañas", show=True),
         Binding("2", "switch_tab('tab_inbox')", "Inbox", show=False),
         Binding("3", "switch_tab('tab_prestamos')", "Préstamos", show=False),
@@ -144,8 +144,8 @@ class MovieMainScreen(Screen):
     DataTable { height: 1fr; margin: 1 2; }
     #sidebar {
         dock: left; 
-        width: 35; 
-        max-width: 50%;
+        width: 45; /* ENSANCHADO */
+        max-width: 60%;
         height: 100%;
         background: $surface-darken-2; 
         border-right: vkey $background;
@@ -153,6 +153,7 @@ class MovieMainScreen(Screen):
         overflow-x: auto; 
     }
     #sidebar.-visible { display: block; }
+    Tree { overflow-x: auto; } 
     """
 
     def compose(self) -> ComposeResult:
@@ -542,8 +543,14 @@ class MovieMainScreen(Screen):
             dir_node = tree.root.add(node_label, data=d['id'])
             for m in dir_movies:
                 status = "✔" if m.get('is_watched') else "✘"
+
+                # Corta si es mayor a 25 caracteres
+                raw_title = m.get('title', '')
+                short_title = raw_title[:25] + \
+                    "..." if len(raw_title) > 25 else raw_title
+
                 dir_node.add_leaf(
-                    f"[dim]{m['id']}[/dim] {m['title']} [{status}]", data=f"movie_{m['id']}")
+                    f"[dim]{m['id']}[/dim] {short_title} [{status}]", data=f"movie_{m['id']}")
 
     def action_toggle_sidebar(self) -> None:
         sidebar = self.query_one("#sidebar", Tree)
@@ -625,55 +632,23 @@ class MovieMainScreen(Screen):
                 self.app.notify, f"Error de red: {e}", severity="error")
 
     def action_delete_dir(self) -> None:
-        sidebar = self.query_one("#sidebar", Tree)
+        if self.query_one("#movie_tabs", TabbedContent).active != "tab_cartelera":
+            return
 
-        # Navegación por Ctrl+B
-        if sidebar.has_focus:
-            selected_node = sidebar.cursor_node
-            if not selected_node or selected_node.data is None:
-                return
+        def do_select(dir_id: str) -> None:
+            if dir_id != "cancel" and dir_id is not None:
+                dir_name = next((d['name'] for d in getattr(
+                    self, 'all_dirs', []) if str(d['id']) == dir_id), "Directorio")
 
-            data_val = str(selected_node.data)
+                def do_confirm(confirm: bool) -> None:
+                    if confirm:
+                        self.process_delete_dir(dir_id)
 
-            if data_val == "root":
-                self.app.notify(
-                    "Eso no se puede hacer. La raíz es inamovible.", severity="error")
-                return
-            if data_val.startswith("movie_"):
-                self.app.notify(
-                    "Debes seleccionar una carpeta, no un archivo.", severity="warning")
-                return
+                self.app.push_screen(ConfirmModal(
+                    f"¿Seguro que deseas destruir '{dir_name}'?"), do_confirm)
 
-            dir_id = data_val
-            dir_name = next((d['name'] for d in getattr(
-                self, 'all_dirs', []) if str(d['id']) == dir_id), "Directorio")
-
-            def do_confirm_tree(confirm: bool) -> None:
-                if confirm:
-                    self.process_delete_dir(dir_id)
-
-            self.app.push_screen(ConfirmModal(
-                f"¿Seguro que deseas destruir la carpeta '{dir_name}'?"), do_confirm_tree)
-
-        # En la pestaña de Inventario
-        else:
-            if self.query_one("#movie_tabs", TabbedContent).active != "tab_cartelera":
-                return
-
-            def do_select(dir_id: str) -> None:
-                if dir_id != "cancel" and dir_id is not None:
-                    dir_name = next((d['name'] for d in getattr(
-                        self, 'all_dirs', []) if str(d['id']) == dir_id), "Directorio")
-
-                    def do_confirm_table(confirm: bool) -> None:
-                        if confirm:
-                            self.process_delete_dir(dir_id)
-
-                    self.app.push_screen(ConfirmModal(
-                        f"¿Seguro que deseas destruir '{dir_name}'?"), do_confirm_table)
-
-            self.app.push_screen(DeleteDirModal(
-                getattr(self, 'all_dirs', [])), do_select)
+        self.app.push_screen(DeleteDirModal(
+            getattr(self, 'all_dirs', [])), do_select)
 
     @work(thread=True)
     def process_delete_dir(self, dir_id: str) -> None:
@@ -752,7 +727,10 @@ class MovieMainScreen(Screen):
         def do_watch(keyword: str | None) -> None:
             if keyword:
                 self.process_add_watcher(keyword)
-        self.app.push_screen(WatcherModal(), do_watch)
+
+        # Le pasa los parámetros cinematográficos
+        self.app.push_screen(WatcherModal(
+            "Vigilar Director/Saga", "Ej: Denis Villeneuve"), do_watch)
 
     @work(thread=True)
     def process_add_watcher(self, keyword: str) -> None:

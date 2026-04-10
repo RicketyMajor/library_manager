@@ -200,10 +200,16 @@ class SyncConsoleModal(ModalScreen):
 class WatcherModal(ModalScreen[str]):
     """Diálogo para añadir a la lista negra/vigilancia."""
 
+    # Añadimos parámetros dinámicos para que sirva en Biblioteca y Videoclub
+    def __init__(self, title_text: str = "Vigilar Nuevo Autor/Saga", placeholder_text: str = "Ej: Tatsuki Fujimoto", **kwargs):
+        super().__init__(**kwargs)
+        self.title_text = title_text
+        self.placeholder_text = placeholder_text
+
     def compose(self) -> ComposeResult:
         with Vertical(id="watcher_dialog"):
-            yield Label("Vigilar Nuevo Autor/Saga", classes="modal_title")
-            yield Input(placeholder="Ej: Tatsuki Fujimoto", id="inp_keyword")
+            yield Label(self.title_text, classes="modal_title")
+            yield Input(placeholder=self.placeholder_text, id="inp_keyword")
             with Horizontal(classes="form_buttons"):
                 yield Button("Vigilar", variant="success", id="btn_add")
                 yield Button("Cancelar", variant="error", id="btn_cancel")
@@ -647,14 +653,14 @@ class ManualMovieAddModal(ModalScreen[dict]):
 
 
 class DeleteDirModal(ModalScreen[str]):
-    """Diálogo para eliminar un directorio existente."""
+    """Diálogo para eliminar un directorio mediante selección explícita."""
 
     def __init__(self, dirs: list, **kwargs):
         super().__init__(**kwargs)
         self.dirs = dirs
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="move_dir_dialog"):  # Reutiliza el CSS del otro modal
+        with Vertical(id="move_dir_dialog"):  # Reciclamos el CSS de Mover Directorio
             yield Label("Destruir Directorio", classes="modal_title")
             yield Label("Selecciona la carpeta a eliminar:", classes="edit_label")
             yield Label("[dim]Los ítems en su interior volverán a la raíz.[/dim]", classes="edit_label")

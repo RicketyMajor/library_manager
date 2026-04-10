@@ -12,6 +12,7 @@ class InventoryTab(TabPane):
         ("d", "screen.show_details", "Ver Detalles"),
         ("l", "screen.lend_book", "Prestar a Amigo"),
         ("c", "screen.create_dir", "Crear Carpeta"),
+        ("D", "screen.delete_dir", "Borrar Carpeta"),
         ("x", "screen.delete_book", "Eliminar Ficha"),
     ]
 
