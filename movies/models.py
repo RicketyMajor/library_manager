@@ -22,6 +22,9 @@ class Movie(models.Model):
     title = models.CharField(max_length=255)
     original_title = models.CharField(max_length=255, blank=True, null=True)
     director = models.CharField(max_length=255, default="Desconocido")
+    writers = models.CharField(max_length=255, blank=True, null=True)
+    production_company = models.CharField(
+        max_length=255, blank=True, null=True)
     cast = models.TextField(
         blank=True, help_text="Reparto principal, separado por comas")
 

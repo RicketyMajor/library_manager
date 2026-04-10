@@ -19,6 +19,8 @@ def search_movie_omdb(title):
             return {
                 "title": data.get('Title'),
                 "director": data.get('Director'),
+                "writers": data.get('Writer', '').split(', ')[0] if data.get('Writer') else "Desconocido",
+                "production_company": data.get('Production', "Desconocida"),
                 "release_year": int(data.get('Year')[:4]) if data.get('Year') else None,
                 "genres": data.get('Genre', '').split(', '),
                 "synopsis": data.get('Plot'),

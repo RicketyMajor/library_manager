@@ -78,14 +78,18 @@ def scan_movie(request):
     # Guarda la película
     movie = Movie.objects.create(
         title=movie_data['title'],
-        original_title=movie_data['original_title'],
-        director=movie_data['director'],
-        cast=movie_data['cast'],
-        release_year=movie_data['release_year'],
-        duration_minutes=movie_data['duration_minutes'],
-        genres=movie_data['genres'],
-        synopsis=movie_data['synopsis'],
-        poster_url=movie_data['poster_url']
+        original_title=movie_data.get('original_title', ''),
+        director=movie_data.get('director', 'Desconocido'),
+        writers=movie_data.get(
+            'writers', 'Desconocido'),
+        production_company=movie_data.get(
+            'production_company', ''),
+        cast=movie_data.get('cast', ''),
+        release_year=movie_data.get('release_year'),
+        duration_minutes=movie_data.get('duration_minutes', 0),
+        genres=movie_data.get('genres', []),
+        synopsis=movie_data.get('synopsis', ''),
+        poster_url=movie_data.get('poster_url', '')
     )
 
     return Response({
