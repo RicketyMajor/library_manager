@@ -71,7 +71,6 @@ class WishlistTab(TabPane):
 class MovieTrackerTab(TabPane):
     """Pestaña de Hábitos para el Videoclub."""
     BINDINGS = [
-        ("m", "screen.log_minutes", "Anotar Minutos"),
         ("f", "screen.finish_movie", "Registrar Película Vista"),
     ]
 

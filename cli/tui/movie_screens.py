@@ -7,7 +7,7 @@ from textual.containers import VerticalScroll, Vertical, Grid
 from textual.binding import Binding
 from textual import work
 from .constants import API_MOVIES, API_MOVIE_INBOX, API_MOVIE_PROCESS, API_MOVIE_DIRS, API_MOVIE_TRACKER, API_MOVIE_TRACKER_ANNUAL, API_MOVIE_TRACKER_MINUTES, API_MOVIE_TRACKER_FINISH, API_MOVIE_WATCHERS, API_MOVIE_WISHLIST
-from .modals import AddMovieMenuModal, MovieScannerModal, LendModal, ConfirmModal, ManualMovieAddModal, DirModal, MoveToDirModal, DeleteDirModal, LogMinutesModal, FinishMovieModal, SyncConsoleModal, WatcherModal, WatchersListModal
+from .modals import AddMovieMenuModal, MovieScannerModal, LendModal, ConfirmModal, ManualMovieAddModal, DirModal, MoveToDirModal, DeleteDirModal, FinishMovieModal, SyncConsoleModal, WatcherModal, WatchersListModal
 from .tabs import MovieWishlistTab
 
 
@@ -171,7 +171,7 @@ class MovieMainScreen(Screen):
         t_movies = self.query_one("#movies_table", DataTable)
         t_movies.cursor_type = "row"
         t_movies.zebra_stripes = True
-        t_movies.add_columns("ID", "Título", "Director", "Año", "Visto")
+        t_movies.add_columns("ID", "Título", "Director", "Formato", "Visto")
 
         t_inbox = self.query_one("#movie_inbox_table", DataTable)
         t_inbox.cursor_type = "row"
@@ -257,13 +257,27 @@ class MovieMainScreen(Screen):
             # Llenar Inventario
             if not m.get('is_loaned'):
                 status = "✔" if m.get('is_watched') else "✘"
-                table_inv.add_row(str(m.get('id')), m.get('title', '').upper(), m.get(
-                    'director', '-'), str(m.get('release_year', '-')), status, key=str(m.get('id')))
+
+                # inyecta el nuevo campo 'format_type'
+                table_inv.add_row(
+                    str(m.get('id')),
+                    m.get('title', '').upper(),
+                    m.get('director', '-'),
+                    m.get('format_type', 'BLU-RAY'),
+                    status,
+                    key=str(m.get('id'))
+                )
+
             # Llenar Préstamos
             else:
-                amigo = m.get('friend_name') or 'Desconocido'  # <- CAMBIO AQUÍ
-                table_loans.add_row(str(m.get('id')), m.get('title', '').upper(),
-                                    amigo, "⇋ Prestada", key=str(m.get('id')))
+                amigo = m.get('friend_name') or 'Desconocido'
+                table_loans.add_row(
+                    str(m.get('id')),
+                    m.get('title', '').upper(),
+                    amigo,
+                    "⇋ Prestada",
+                    key=str(m.get('id'))
+                )
 
     def populate_inbox(self, items: list) -> None:
         table = self.query_one("#movie_inbox_table", DataTable)

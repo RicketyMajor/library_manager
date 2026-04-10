@@ -261,18 +261,17 @@ def movie_scanner_view(request):
 
 @api_view(['GET'])
 def tracker_stats(request):
-    """Devuelve las estadísticas del mes en curso."""
+    """Devuelve las estadísticas del mes en curso basadas en las películas terminadas."""
     today = timezone.localdate()
     start_of_month = today.replace(day=1)
 
-    sessions = MovieViewingSession.objects.filter(
-        date__gte=start_of_month, date__lte=today)
-    total_minutes = sessions.aggregate(Sum('minutes_watched'))[
-        'minutes_watched__sum'] or 0
+    # Cuenta cuántos registros se crearon en el mes
+    movies_this_month = MovieAnnualRecord.objects.filter(
+        date_watched__gte=start_of_month, date_watched__lte=today).count()
 
     return Response({
         "current_month": today.strftime("%B").capitalize(),
-        "minutes_this_month": total_minutes
+        "movies_this_month": movies_this_month
     })
 
 

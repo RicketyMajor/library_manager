@@ -682,25 +682,6 @@ class DeleteDirModal(ModalScreen[str]):
             self.dismiss("cancel")
 
 
-class LogMinutesModal(ModalScreen[int]):
-    """Diálogo rápido para el Tracker de Videoclub."""
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="pages_dialog"):
-            yield Label("Anotar Minutos Vistos Hoy", classes="modal_title")
-            yield Input(placeholder="Ej: 120", id="inp_minutes")
-            with Horizontal(classes="form_buttons"):
-                yield Button("Guardar", variant="success", id="btn_add")
-                yield Button("Cancelar", variant="error", id="btn_cancel")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn_add":
-            val = self.query_one("#inp_minutes", Input).value
-            self.dismiss(int(val) if val.isdigit() else None)
-        else:
-            self.dismiss(None)
-
-
 class FinishMovieModal(ModalScreen[dict]):
     """Diálogo para registrar una película como vista en el año."""
 
