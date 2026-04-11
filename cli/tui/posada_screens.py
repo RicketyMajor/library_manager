@@ -1,12 +1,37 @@
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.widgets import Header, Footer, Button, Label, TabbedContent, TabPane, DataTable, Log, Input, RadioSet, RadioButton, SelectionList
+from textual.widgets import Header, Footer, Button, Label, TabbedContent, TabPane, DataTable, Log, Input, RadioSet, RadioButton, SelectionList, Select
 from textual.containers import Vertical, Horizontal, Grid
 from textual.reactive import reactive
 from textual import work
 import httpx
 
 API_POSADA_BASE = "http://127.0.0.1:8000/posada/api/"
+
+# --- GENERADOR DE RELOJ ASCII ---
+ASCII_NUMS = {
+    '0': ["███", "█ █", "█ █", "█ █", "███"],
+    '1': [" ██", "  █", "  █", "  █", "███"],
+    '2': ["███", "  █", "███", "█  ", "███"],
+    '3': ["███", "  █", "███", "  █", "███"],
+    '4': ["█ █", "█ █", "███", "  █", "  █"],
+    '5': ["███", "█  ", "███", "  █", "███"],
+    '6': ["███", "█  ", "███", "█ █", "███"],
+    '7': ["███", "  █", "  █", "  █", "  █"],
+    '8': ["███", "█ █", "███", "█ █", "███"],
+    '9': ["███", "█ █", "███", "  █", "███"],
+    ':': ["   ", " ▄ ", "   ", " ▀ ", "   "]
+}
+
+
+def get_ascii_time(time_str: str) -> str:
+    """Convierte un string como '25:00' en un bloque de texto gigante ASCII."""
+    lines = ["", "", "", "", ""]
+    for char in time_str:
+        if char in ASCII_NUMS:
+            for i in range(5):
+                lines[i] += ASCII_NUMS[char][i] + "  "
+    return "\n".join(lines)
 
 # --- MODAL DE CONFIGURACIÓN ---
 
@@ -136,6 +161,47 @@ class LootSummaryModal(ModalScreen[None]):
         if event.button.id == "btn_claim_loot":
             self.dismiss(None)
 
+# --- MODAL DE RECLUTAMIENTO (AVATAR) ---
+
+
+class CharacterCreationModal(ModalScreen[dict]):
+    """Ventana emergente que fuerza la creación del primer aventurero."""
+
+    CSS = """
+    #char_setup_dialog { width: 50; height: auto; padding: 1 2; border: heavy $success; background: $surface; }
+    .modal_title { text-style: bold; margin-bottom: 1; text-align: center; width: 100%; color: $warning; }
+    .char_label { margin-top: 1; text-style: bold; color: $success; }
+    #btn_create_char { width: 100%; margin-top: 2; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="char_setup_dialog"):
+            yield Label("📜 CONTRATO DE GREMIO", classes="modal_title")
+            yield Label("Tu Gremio está vacío. Debes crear a tu Avatar para comenzar:", classes="char_label")
+
+            yield Input(placeholder="Nombre del héroe...", id="char_name")
+
+            yield Label("Clase:")
+            yield Select((("Artífice", "ART"), ("Bárbaro", "BBN"), ("Bardo", "BRD"), ("Clérigo", "CLR"), ("Druida", "DRD"), ("Guerrero", "FTR"), ("Monje", "MNK"), ("Paladín", "PAL"), ("Explorador", "RGR"), ("Pícaro", "ROG"), ("Hechicero", "SOR"), ("Brujo", "WLK"), ("Mago", "WIZ")), id="char_class", value="FTR")
+
+            yield Label("Raza:")
+            yield Select((("Humano", "HUM"), ("Enano", "DWF"), ("Elfo", "ELF"), ("Mediano", "HLF"), ("Gnomo", "GNM"), ("Semielfo", "HEF"), ("Semiorco", "HOC"), ("Dracónido", "DGB"), ("Tiefling", "TIE")), id="char_race", value="HUM")
+
+            yield Label("Género:")
+            yield Select((("Masculino", "M"), ("Femenino", "F"), ("Otro / Misterioso", "O")), id="char_gender", value="O")
+
+            yield Button("Firmar Contrato y Unirse", variant="success", id="btn_create_char")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_create_char":
+            name = self.query_one(
+                "#char_name", Input).value or "Aventurero Desconocido"
+            cls = self.query_one("#char_class", Select).value
+            race = self.query_one("#char_race", Select).value
+            gen = self.query_one("#char_gender", Select).value
+            self.dismiss({"name": name, "adv_class": cls,
+                         "race": race, "gender": gen})
+
 # --- PANTALLA PRINCIPAL ---
 
 
@@ -147,27 +213,25 @@ class PosadaMainScreen(Screen):
     is_countdown = reactive(True)
 
     BINDINGS = [
-        ("c", "setup_timer", "Configurar Expedición"),
-        ("s", "stop_timer", "Detener / Huir"),
         ("escape", "app.pop_screen", "Volver al Launcher"),
         ("q", "app.quit", "Salir de Bunker"),
-
-
+        ("c", "setup_timer", "Configurar Expedición"),
+        ("p", "pause_timer", "Pausar / Continuar"),
+        ("s", "stop_timer", "Detener / Huir")
     ]
 
     CSS = """
     #posada_root { padding: 1 2; }
     
-    /* Layout forzado para evitar colapsos en el TabPane */
-    #focus_layout { height: 25; margin-top: 1; } /* Altura fija obligatoria */
+    #focus_layout { height: 25; margin-top: 1; } 
     #left_col { width: 45%; height: 100%; margin-right: 2; }
     #right_col { width: 50%; height: 100%; }
     
-    .timer_panel { border: heavy $accent; align: center middle; height: 10; margin-bottom: 1; }
-    .party_panel { border: round $success; padding: 1; height: 14; }
+    .timer_panel { border: heavy $accent; align: center middle; height: 13; margin-bottom: 1; padding: 1; }
+    .party_panel { border: round $success; padding: 1; height: 1fr; }
     .mud_log_panel { border: solid #888888; padding: 0 1; background: #0c0c0c; height: 100%; }
     
-    #timer_display { text-style: bold; color: $warning; }
+    #timer_display { text-style: bold; color: $warning; text-align: center; width: 100%; content-align: center middle; }
     .timer_buttons { height: 3; align: center middle; margin-top: 1; }
     .timer_buttons Button { margin: 0 1; }
     
@@ -183,18 +247,23 @@ class PosadaMainScreen(Screen):
                 with TabPane("Sala de Enfoque", id="tab_timer"):
                     with Horizontal(id="focus_layout"):
 
+                        # Columna Izquierda
                         with Vertical(id="left_col"):
                             with Vertical(classes="timer_panel"):
-                                yield Label("25:00", id="timer_display")
+                                # Reloj Gigante
+                                yield Label(get_ascii_time("25:00"), id="timer_display")
                                 with Horizontal(classes="timer_buttons"):
                                     yield Button("Configurar y Partir", id="btn_setup_timer", variant="success")
+                                    # Los botones limpios, sin data_bind
+                                    yield Button("Pausar", id="btn_pause_timer", variant="warning")
+                                    yield Button("Continuar", id="btn_resume_timer", variant="success")
                                     yield Button("Detener / Huir", id="btn_stop_timer", variant="error")
 
                             with Vertical(classes="party_panel"):
                                 yield Label("Grupo Activo (Max 5)")
                                 yield DataTable(id="active_party_table")
 
-                        # Columna Derecha (50% de la pantalla)
+                        # Columna Derecha (MUD Log)
                         with Vertical(id="right_col", classes="mud_log_panel"):
                             yield Label("📜 Registro de Eventos")
                             yield Log(id="event_log", highlight=True)
@@ -228,6 +297,8 @@ class PosadaMainScreen(Screen):
         # Sincroniza la interfaz con la base de datos
         self.sync_guild_status()
 
+        self.set_timer_ui_state("idle")
+
     # --- LLAMADAS A LA API ---
     @work(thread=True)
     def sync_guild_status(self) -> None:
@@ -244,6 +315,8 @@ class PosadaMainScreen(Screen):
         guild = data.get("guild", {})
         adventurers = data.get("adventurers", [])
 
+        self.adventurers_cache = adventurers
+
         self.query_one("#lbl_guild_level", Label).update(
             f"Nivel del Maestro: {guild.get('level')} | XP: {guild.get('xp')}")
 
@@ -258,12 +331,66 @@ class PosadaMainScreen(Screen):
             table_adv.add_row(adv["name"], adv["class_name"], str(
                 adv["level"]), str(adv["xp"]), adv["wealth_summary"], status)
 
-    # --- RELOJ DUAL Y BINDINGS ---
+        # SI EL GREMIO ESTÁ VACÍO, fuerza LA CREACIÓN DEL AVATAR
+        if not adventurers:
+            self.app.push_screen(CharacterCreationModal(),
+                                 self.submit_new_character)
+
+    @work(thread=True)
+    def submit_new_character(self, result: dict | None) -> None:
+        """Envía el nuevo personaje a Django y recarga la interfaz."""
+        if result is None:
+            return
+        try:
+            resp = httpx.post(
+                f"{API_POSADA_BASE}adventurer/create/", json=result, timeout=5.0)
+            if resp.status_code == 200:
+                self.app.call_from_thread(
+                    self.app.notify, "¡Avatar creado! Bienvenido a La Posada.", severity="success")
+                self.sync_guild_status()  # Recargamos la interfaz
+            else:
+                self.app.call_from_thread(
+                    self.app.notify, "Error al crear el personaje.", severity="error")
+        except Exception as e:
+            self.app.call_from_thread(
+                self.app.notify, "Fallo de conexión.", severity="error")
+
+    # --- MÁQUINA DE ESTADOS DE BOTONES ---
+    def set_timer_ui_state(self, state: str) -> None:
+        """Controla qué botones se ven según el estado del reloj (idle, running, paused)."""
+        btn_setup = self.query_one("#btn_setup_timer", Button)
+        btn_pause = self.query_one("#btn_pause_timer", Button)
+        btn_resume = self.query_one("#btn_resume_timer", Button)
+        btn_stop = self.query_one("#btn_stop_timer", Button)
+
+        if state == "idle":
+            btn_setup.display = True
+            btn_pause.display = False
+            btn_resume.display = False
+            btn_stop.display = False
+            try:
+                self.query_one("#active_party_table", DataTable).clear()
+            except Exception:
+                pass
+        elif state == "running":
+            btn_setup.display = False
+            btn_pause.display = True
+            btn_resume.display = False
+            btn_stop.display = True
+        elif state == "paused":
+            btn_setup.display = False
+            btn_pause.display = False
+            btn_resume.display = True
+            btn_stop.display = True
+
+    # --- LÓGICA DEL RELOJ DUAL Y BINDINGS ---
     def watch_time_seconds(self, time_seconds: int) -> None:
+        """Actualiza el reloj gigante a cada segundo."""
         minutes, seconds = divmod(time_seconds, 60)
+        time_str = f"{minutes:02d}:{seconds:02d}"
         try:
             self.query_one("#timer_display", Label).update(
-                f"{minutes:02d}:{seconds:02d}")
+                get_ascii_time(time_str))
         except Exception:
             pass
 
@@ -274,24 +401,48 @@ class PosadaMainScreen(Screen):
             else:
                 self.clock_ticker.pause()
                 self.timer_active = False
+                self.set_timer_ui_state("idle")
                 self.handle_session_end(success=True)
         else:
             self.time_seconds += 1
 
+    # --- BINDINGS Y EVENTOS ---
     def action_setup_timer(self) -> None:
         if not self.timer_active:
             self.app.push_screen(SessionSetupModal(), self.start_session)
 
-    def action_stop_timer(self) -> None:
+    def action_pause_timer(self) -> None:
         if self.timer_active:
             self.clock_ticker.pause()
             self.timer_active = False
+            self.set_timer_ui_state("paused")
+            self.query_one("#event_log", Log).write_line(
+                "⏸ El tiempo se ha detenido momentáneamente.")
+
+    def action_resume_timer(self) -> None:
+        if not self.timer_active and self.time_seconds > 0:  # Solo si hay una sesión a medias
+            self.clock_ticker.resume()
+            self.timer_active = True
+            self.set_timer_ui_state("running")
+            self.query_one("#event_log", Log).write_line(
+                "▶ La expedición continúa.")
+
+    def action_stop_timer(self) -> None:
+        # Se puede detener tanto si está activo como pausado
+        if self.timer_active or self.query_one("#btn_resume_timer", Button).display:
+            self.clock_ticker.pause()
+            self.timer_active = False
+            self.set_timer_ui_state("idle")
             success_status = not self.is_countdown
             self.handle_session_end(success=success_status)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_setup_timer":
             self.action_setup_timer()
+        elif event.button.id == "btn_pause_timer":
+            self.action_pause_timer()
+        elif event.button.id == "btn_resume_timer":
+            self.action_resume_timer()
         elif event.button.id == "btn_stop_timer":
             self.action_stop_timer()
 
@@ -301,17 +452,27 @@ class PosadaMainScreen(Screen):
 
         log = self.query_one("#event_log", Log)
         self.timer_active = True
+        self.set_timer_ui_state("running")
 
         self.active_party_ids = result.get("party", [])
         cat = result["category"]
         self.session_category = cat
+
+        party_table = self.query_one("#active_party_table", DataTable)
+        party_table.clear()
+        for adv_id in self.active_party_ids:
+            for adv in getattr(self, 'adventurers_cache', []):
+                if adv["id"] == adv_id:
+                    party_table.add_row(adv["name"], adv["class_name"], adv["race"], str(
+                        adv["level"]), "⚔️ En Mazmorra")
+                    break
 
         if result["mode"] == "timer":
             self.is_countdown = True
             self.session_duration_mins = result["duration"]
             self.time_seconds = result["duration"] * 60
             log.write_line(
-                f"\n⏳ [Misión: {cat}] Temporizador de {result['duration']} min iniciado con {len(self.active_party_ids)} aventureros.")
+                f"\n[Misión: {cat}] Temporizador de {result['duration']} min iniciado con {len(self.active_party_ids)} aventureros.")
         else:
             self.is_countdown = False
             self.time_seconds = 0
@@ -321,6 +482,7 @@ class PosadaMainScreen(Screen):
         self.clock_ticker.resume()
 
     def handle_session_end(self, success: bool):
+        # ... (Tu código actual de handle_session_end con el bono de compasión se mantiene igual aquí abajo) ...
         log = self.query_one("#event_log", Log)
         if success:
             log.write_line("¡Exploración completada con éxito!")

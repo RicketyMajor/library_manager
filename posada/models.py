@@ -32,6 +32,13 @@ class AdventurerRace(models.TextChoices):
     TIEFLING = 'TIE', 'Tiefling'
 
 
+class AdventurerGender(models.TextChoices):
+    # Géneros para los aventureros
+    MALE = 'M', 'Masculino'
+    FEMALE = 'F', 'Femenino'
+    OTHER = 'O', 'Otro / Misterioso'
+
+
 class WealthMixin(models.Model):
     """Modelo abstracto que otorga la economía completa de la Mancomunidad a cualquier entidad."""
     iron_half_penny = models.PositiveIntegerField(
@@ -57,6 +64,24 @@ class WealthMixin(models.Model):
         abstract = True
 
 
+class Adventurer(WealthMixin):
+    name = models.CharField(max_length=100)
+    adv_class = models.CharField(max_length=3, choices=AdventurerClass.choices)
+    race = models.CharField(max_length=3, choices=AdventurerRace.choices)
+    gender = models.CharField(
+        max_length=1, choices=AdventurerGender.choices, default='O')  # <--- NUEVO CAMPO
+
+    level = models.PositiveIntegerField(default=1)
+    experience = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=False)
+    is_recovering = models.BooleanField(default=False)
+    recovery_time_left = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.name} - {self.get_adv_class_display()} (Nv. {self.level})"
+
+
 class GuildProfile(WealthMixin):
     level = models.PositiveIntegerField(default=1)
     experience = models.PositiveIntegerField(default=0)
@@ -73,22 +98,6 @@ class GuildProfile(WealthMixin):
 
     def __str__(self):
         return f"Gremio Nivel {self.level} - XP: {self.experience}"
-
-
-class Adventurer(WealthMixin):
-    name = models.CharField(max_length=100)
-    adv_class = models.CharField(max_length=3, choices=AdventurerClass.choices)
-    race = models.CharField(max_length=3, choices=AdventurerRace.choices)
-
-    level = models.PositiveIntegerField(default=1)
-    experience = models.PositiveIntegerField(default=0)
-
-    is_active = models.BooleanField(default=False)
-    is_recovering = models.BooleanField(default=False)
-    recovery_time_left = models.PositiveIntegerField(default=0)
-
-    def __str__(self):
-        return f"{self.name} - {self.get_adv_class_display()} (Nv. {self.level})"
 
 
 class DeepWorkSession(models.Model):

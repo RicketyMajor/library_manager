@@ -85,3 +85,18 @@ def complete_session(request):
         "log": session.event_log,
         "engine_details": result
     })
+
+
+@api_view(['POST'])
+def create_adventurer(request):
+    """Crea un nuevo aventurero inicial desde la TUI."""
+    data = request.data
+
+    adv = Adventurer.objects.create(
+        name=data.get('name', 'Aventurero Desconocido'),
+        adv_class=data.get('adv_class', 'FTR'),
+        race=data.get('race', 'HUM'),
+        gender=data.get('gender', 'O')
+    )
+
+    return Response({"status": "success", "message": f"{adv.name} se ha unido al Gremio."})
