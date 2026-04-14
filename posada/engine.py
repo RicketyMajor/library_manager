@@ -6,46 +6,86 @@ XP_PER_MINUTE = 10
 XP_MULTIPLIER_CLASS_MATCH = 1.5
 
 
-def calculate_loot(duration_minutes):
+def generate_session_script(session_id, duration_minutes, adventurers_qs):
     """
-    Calcula el botín basado en la duración de la sesión.
-    Usa probabilidades (drop rates) que mejoran con el tiempo.
+    El Oráculo: Genera el guion determinista de la sesión.
+    Al usar el ID de la sesión como semilla, siempre generará la misma
+    línea de tiempo de eventos para una misma expedición.
     """
-    loot = {
-        'iron_half_penny': 0, 'iron_penny': 0, 'ardite': 0, 'drabin': 0,
-        'copper_penny': 0, 'iota': 0,
-        'silver_penny': 0, 'sueldo': 0, 'talento': 0,
-        'real': 0, 'marco': 0
-    }
+    random.seed(session_id)
 
-    # Por cada minuto de estudio, 1 a 3 ardites
-    loot['ardite'] = sum(random.randint(1, 3) for _ in range(duration_minutes))
+    script = []
+    total_seconds = duration_minutes * 60
+    adventurers = list(adventurers_qs)
 
-    # Recompensas de Cobre (Sesiones de más de 25 min)
+    if not adventurers:
+        random.seed()  # Restaurar semilla
+        return script
+
+    # Eventos de Botín menor - 1 a 3 ardites por minuto
+    for m in range(duration_minutes):
+        sec = (m * 60) + random.randint(5, 55)
+        adv = random.choice(adventurers)
+        amount = random.randint(1, 3)
+        script.append({
+            "second": sec, "type": "loot", "coin": "ardite", "amount": amount,
+            "message": f"{adv.name} ha encontrado {amount} ardite(s) en la oscuridad."
+        })
+
+    # Eventos de Botín
     if duration_minutes >= 25:
-        # Probabilidad de 1 iota por cada bloque de 25 mins
         blocks = duration_minutes // 25
-        for _ in range(blocks):
-            if random.random() < 0.60:  # 60% drop rate
-                loot['iota'] += 1
+        for i in range(blocks):
+            if random.random() < 0.60:
+                sec = random.randint(i * 1500, (i+1) * 1500 - 1)
+                adv = random.choice(adventurers)
+                script.append({
+                    "second": sec, "type": "loot", "coin": "iota", "amount": 1,
+                    "message": f"¡Billo! {adv.name} ha desenterrado 1 Iota."
+                })
 
-    # Recompensas de Plata (Sesiones de Deep Work, > 50 min)
     if duration_minutes >= 50:
         blocks = duration_minutes // 50
-        for _ in range(blocks):
-            if random.random() < 0.30:  # 30% drop rate
-                loot['sueldo'] += 1
-            elif random.random() < 0.05:  # 5% drop rate de un Talento directo
-                loot['talento'] += 1
+        for i in range(blocks):
+            sec = random.randint(i * 3000, (i+1) * 3000 - 1)
+            adv = random.choice(adventurers)
+            if random.random() < 0.30:
+                script.append({"second": sec, "type": "loot", "coin": "sueldo", "amount": 1,
+                              "message": f"{adv.name} encontró 1 Sueldo de plata en un cofre oxidado."})
+            elif random.random() < 0.05:
+                script.append({"second": sec, "type": "loot", "coin": "talento", "amount": 1,
+                              "message": f"¡UN TALENTO! {adv.name} apenas puede creer su suerte al ver el oro."})
 
-    # Recompensas de Oro (Sesiones titánicas, > 120 min)
-    if duration_minutes >= 120:
-        if random.random() < 0.10:  # 10% drop rate
-            loot['real'] += 1
-        elif random.random() < 0.02:  # 2% drop rate mítico
-            loot['marco'] += 1
+    # Emboscadas
+    ambush_blocks = duration_minutes // 20
+    for i in range(ambush_blocks):
+        if random.random() < 0.25:  # 25% de probabilidad de emboscada
+            sec = random.randint(i * 1200, (i+1) * 1200 - 1)
+            adv = random.choice(adventurers)
+            script.append({
+                "second": sec, "type": "injury", "adventurer_id": adv.id,
+                "message": f"¡EMBOSCADA! {adv.name} ha resultado gravemente herido y necesitará recuperación."
+            })
 
-    return loot
+    # Eventos de Ambientación
+    flavor_texts = [
+        "{} afila su arma silenciosamente.",
+        "{} revisa el mapa de la mazmorra con una antorcha.",
+        "Se escucha un aullido a lo lejos. {} se pone en guardia.",
+        "El silencio inunda la sala mientras {} lidera la marcha."
+    ]
+    flavor_count = duration_minutes // 10
+    for _ in range(flavor_count):
+        sec = random.randint(10, total_seconds - 10)
+        adv = random.choice(adventurers)
+        msg = random.choice(flavor_texts).format(adv.name)
+        script.append(
+            {"second": sec, "type": "flavor", "message": f"{msg}"})
+
+    # Ordenar cronológicamente y restaurar la aletoriedad global
+    script.sort(key=lambda x: x["second"])
+    random.seed()
+    return script
 
 
 def distribute_tithe(guild, adventurers_qs, loot_dict, event_log):
@@ -135,7 +175,7 @@ def market_phase(adventurers_qs, event_log):
         adv.save()
 
 
-def process_session_completion(session_id):
+def process_session_completion(session_id, survived_seconds=None):
     try:
         session = DeepWorkSession.objects.get(id=session_id)
     except DeepWorkSession.DoesNotExist:
@@ -145,11 +185,40 @@ def process_session_completion(session_id):
         return {"status": "warning", "message": "Esta sesión ya fue procesada"}
 
     guild, _ = GuildProfile.objects.get_or_create(id=1)
-    event_log = []
     adventurers = session.adventurers_involved.all()
+    event_log = []
 
-    # Calcular Botín General
-    loot = calculate_loot(session.duration_minutes)
+    if survived_seconds is None:
+        survived_seconds = session.duration_minutes * 60
+
+    # Re-genera el guion exacto usando determinista
+    script = generate_session_script(
+        session.id, session.duration_minutes, adventurers)
+
+    loot = {
+        'iron_half_penny': 0, 'iron_penny': 0, 'ardite': 0, 'drabin': 0,
+        'copper_penny': 0, 'iota': 0,
+        'silver_penny': 0, 'sueldo': 0, 'talento': 0,
+        'real': 0, 'marco': 0
+    }
+
+    # Procesar eventos ocurridos dentro del tiempo sobrevivido
+    injured_ids = set()
+    for event in script:
+        if event["second"] <= survived_seconds:
+            if event["type"] == "loot":
+                loot[event["coin"]] += event["amount"]
+            elif event["type"] == "injury":
+                injured_ids.add(event["adventurer_id"])
+
+    # Aplicar heridas
+    for adv in adventurers:
+        if adv.id in injured_ids:
+            adv.is_recovering = True
+            adv.recovery_time_left = 120  # 2 horas de cooldown
+            adv.save()
+            event_log.append(
+                f"{adv.name} fue enviado a la enfermería en camilla.")
 
     # El Diezmo
     distribute_tithe(guild, adventurers, loot, event_log)
@@ -157,10 +226,15 @@ def process_session_completion(session_id):
     # Fase de Mercado Autónomo
     market_phase(adventurers, event_log)
 
-    # Experiencia (XP)
-    base_xp = session.duration_minutes * 10
+    # Experiencia (XP) - basada en minutos sobrevividos reales
+    survived_minutes = survived_seconds // 60
+    if survived_minutes < 1:
+        survived_minutes = 1  # Bono de compasión
+
+    base_xp = survived_minutes * XP_PER_MINUTE
     guild.experience += base_xp
-    event_log.append(f"El Gremio gana {base_xp} XP.")
+    event_log.append(
+        f"El Gremio gana {base_xp} XP por sobrevivir {survived_minutes} min.")
 
     for adv in adventurers:
         adv.experience += base_xp

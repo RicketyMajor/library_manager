@@ -395,6 +395,23 @@ class PosadaMainScreen(Screen):
             pass
 
     def tick_timer(self) -> None:
+        """El reloj que reproduce el destino en tiempo real."""
+        # Calcula los segundos transcurridos reales
+        if self.is_countdown:
+            total_sec = getattr(self, 'session_duration_mins', 25) * 60
+            elapsed = total_sec - self.time_seconds
+        else:
+            elapsed = self.time_seconds
+
+        # Revisa si hay un evento programado en este segundo
+        for event in getattr(self, 'session_script', []):
+            if event["second"] == elapsed:
+                # Formatea el timestamp para que se vea como [14:32] en el log
+                m, s = divmod(elapsed, 60)
+                self.query_one("#event_log", Log).write_line(
+                    f"[{m:02d}:{s:02d}] {event['message']}")
+
+        # Lógica normal del reloj
         if self.is_countdown:
             if self.time_seconds > 0:
                 self.time_seconds -= 1
@@ -406,10 +423,10 @@ class PosadaMainScreen(Screen):
         else:
             self.time_seconds += 1
 
-    # --- BINDINGS Y EVENTOS ---
+    # --- BINDINGS Y EVENTOS DE INTERFAZ ---
     def action_setup_timer(self) -> None:
         if not self.timer_active:
-            self.app.push_screen(SessionSetupModal(), self.start_session)
+            self.app.push_screen(SessionSetupModal(), self.prepare_session)
 
     def action_pause_timer(self) -> None:
         if self.timer_active:
@@ -417,18 +434,17 @@ class PosadaMainScreen(Screen):
             self.timer_active = False
             self.set_timer_ui_state("paused")
             self.query_one("#event_log", Log).write_line(
-                "⏸ El tiempo se ha detenido momentáneamente.")
+                "La expedición se detiene. Los monstruos acechan...")
 
     def action_resume_timer(self) -> None:
-        if not self.timer_active and self.time_seconds > 0:  # Solo si hay una sesión a medias
+        if not self.timer_active and self.time_seconds > 0:
             self.clock_ticker.resume()
             self.timer_active = True
             self.set_timer_ui_state("running")
             self.query_one("#event_log", Log).write_line(
-                "▶ La expedición continúa.")
+                "Se reanuda la marcha en la oscuridad.")
 
     def action_stop_timer(self) -> None:
-        # Se puede detener tanto si está activo como pausado
         if self.timer_active or self.query_one("#btn_resume_timer", Button).display:
             self.clock_ticker.pause()
             self.timer_active = False
@@ -446,78 +462,106 @@ class PosadaMainScreen(Screen):
         elif event.button.id == "btn_stop_timer":
             self.action_stop_timer()
 
-    def start_session(self, result: dict | None) -> None:
+    # --- FLUJO DE INICIO MUD (PRE-CÁLCULO) ---
+    def prepare_session(self, result: dict | None) -> None:
+        """Paso 1: Recibe configuración y pide el guion al backend."""
         if result is None:
             return
 
         log = self.query_one("#event_log", Log)
-        self.timer_active = True
-        self.set_timer_ui_state("running")
+        log.clear()
+        log.write_line("Consultando al Oráculo del Gremio...")
 
         self.active_party_ids = result.get("party", [])
-        cat = result["category"]
-        self.session_category = cat
+        self.session_category = result["category"]
 
+        # Si es cronómetro, pide un guion de 120 mins para que no se quede sin eventos
+        dur = result["duration"] if result["mode"] == "timer" else 120
+
+        self.request_session_script(
+            dur, self.session_category, self.active_party_ids, result)
+
+    @work(thread=True)
+    def request_session_script(self, duration: int, category: str, party: list, original_result: dict) -> None:
+        """Paso 2: Llamada HTTP asíncrona para iniciar la sesión y traer los eventos."""
+        payload = {"duration_minutes": duration,
+                   "category": category, "adventurer_ids": party}
+        try:
+            resp = httpx.post(
+                f"{API_POSADA_BASE}session/start/", json=payload, timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                self.app.call_from_thread(
+                    self.begin_timer_with_script, data, original_result)
+            else:
+                self.app.call_from_thread(
+                    self.app.notify, f"Error del Oráculo: {resp.status_code}", severity="error")
+        except Exception:
+            self.app.call_from_thread(
+                self.app.notify, "Fallo de red al contactar al Gremio.", severity="error")
+
+    def begin_timer_with_script(self, data: dict, result: dict) -> None:
+        """Paso 3: Guarda el guion, dibuja la party y arranca el reloj en vivo."""
+        self.current_session_id = data.get("session_id")
+        self.session_script = data.get("script", [])
+
+        log = self.query_one("#event_log", Log)
         party_table = self.query_one("#active_party_table", DataTable)
         party_table.clear()
+
         for adv_id in self.active_party_ids:
             for adv in getattr(self, 'adventurers_cache', []):
                 if adv["id"] == adv_id:
                     party_table.add_row(adv["name"], adv["class_name"], adv["race"], str(
-                        adv["level"]), "⚔️ En Mazmorra")
+                        adv["level"]), "⚔️ En mazmorra")
                     break
+
+        self.timer_active = True
+        self.set_timer_ui_state("running")
+
+        cat = result["category"]
 
         if result["mode"] == "timer":
             self.is_countdown = True
             self.session_duration_mins = result["duration"]
             self.time_seconds = result["duration"] * 60
             log.write_line(
-                f"\n[Misión: {cat}] Temporizador de {result['duration']} min iniciado con {len(self.active_party_ids)} aventureros.")
+                f"\n[Misión: {cat}] El reloj inicia. ¡Que la suerte os acompañe!")
         else:
             self.is_countdown = False
             self.time_seconds = 0
             log.write_line(
-                f"\n⏱️ [Misión: {cat}] Cronómetro libre iniciado con {len(self.active_party_ids)} aventureros.")
+                f"\n[Misión: {cat}] Cronómetro iniciado hacia lo desconocido.")
 
         self.clock_ticker.resume()
 
+    # --- FLUJO DE CIERRE Y BOTÍN ---
     def handle_session_end(self, success: bool):
-        # ... (Tu código actual de handle_session_end con el bono de compasión se mantiene igual aquí abajo) ...
         log = self.query_one("#event_log", Log)
+
+        if self.is_countdown:
+            total_sec = getattr(self, 'session_duration_mins', 25) * 60
+            elapsed = total_sec - self.time_seconds
+        else:
+            elapsed = self.time_seconds
+
         if success:
-            log.write_line("¡Exploración completada con éxito!")
-            log.write_line(
-                "Enviando reporte al Gremio (Calculando en la Bóveda)...")
-
-            # Determina los minutos reales a enviar a la BD
-            if self.is_countdown:
-                duration_mins = getattr(self, 'session_duration_mins', 25)
-            else:
-                # En cronómetro, los segundos que hayan pasado
-                duration_mins = self.time_seconds // 60
-
-            # Previene que se gane "0" si se hacen pruebas rápidas
-            if duration_mins < 1:
-                duration_mins = 1
-
-            cat = getattr(self, 'session_category', 'General')
-            party = getattr(self, 'active_party_ids', [])
-
-            self.submit_session(duration_mins, cat, party)
+            log.write_line("¡Mazmorra completada con éxito!")
         else:
             log.write_line(
-                "Has cancelado la misión. La party huyó perdiendo su progreso.")
-            self.time_seconds = 25 * 60
-            self.is_countdown = True
+                "Has tocado el cuerno de retirada. La party huye.")
+
+        log.write_line("Consolidando resultados con la Bóveda del Gremio...")
+
+        session_id = getattr(self, 'current_session_id', None)
+        if session_id:
+            self.submit_session_completion(session_id, elapsed)
 
     @work(thread=True)
-    def submit_session(self, duration: int, category: str, party: list) -> None:
-        """Envía los datos de la sesión terminada a Django."""
-        payload = {
-            "duration_minutes": duration,
-            "category": category,
-            "adventurer_ids": party
-        }
+    def submit_session_completion(self, session_id: int, survived_seconds: int) -> None:
+        """Paso Final: Envía los segundos vividos para calcular el botín oficial."""
+        payload = {"session_id": session_id,
+                   "survived_seconds": survived_seconds}
         try:
             resp = httpx.post(
                 f"{API_POSADA_BASE}session/complete/", json=payload, timeout=10.0)
@@ -527,25 +571,21 @@ class PosadaMainScreen(Screen):
             else:
                 self.app.call_from_thread(
                     self.app.notify, f"Error del Motor RPG: {resp.status_code}", severity="error")
-        except Exception as e:
+        except Exception:
             self.app.call_from_thread(
                 self.app.notify, "Fallo crítico al reclamar botín.", severity="error")
 
     def show_loot_summary(self, data: dict) -> None:
-        """Se ejecuta cuando la API devuelve los resultados con éxito."""
         log = self.query_one("#event_log", Log)
 
-        # Escribe los logs narrativos (MUD Log) del motor en la terminal
+        # Imprime los reportes de post-sesión (Diezmo, Tienda, XP)
         for event_msg in data.get("log", []):
             log.write_line(f"📜 {event_msg}")
 
-        # Muestra la ventana emergente de victoria
+        # Muestra la ventana de victoria
         engine_details = data.get("engine_details", {})
         self.app.push_screen(LootSummaryModal(engine_details))
 
-        # Recarga silenciosamente los paneles del Gremio para reflejar el nuevo dinero
         self.sync_guild_status()
-
-        # Resetea el reloj
         self.time_seconds = 25 * 60
         self.is_countdown = True

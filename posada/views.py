@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .models import GuildProfile, Adventurer, DeepWorkSession
-from .engine import process_session_completion
+from .engine import process_session_completion, generate_session_script
 
 
 @api_view(['GET'])
@@ -52,37 +52,57 @@ def guild_status(request):
 
 
 @api_view(['POST'])
-def complete_session(request):
-    """Recibe los datos de la TUI, crea la sesión y dispara el motor RPG."""
+def start_session(request):
+    """Crea la sesión al inicio y devuelve el guion de eventos pre-calculado."""
     data = request.data
     duration = data.get('duration_minutes', 25)
     category = data.get('category', 'General')
     adventurer_ids = data.get('adventurer_ids', [])
 
-    # Crea la sesión inicial (aún no completada)
+    # Crea la sesión en el momento para obtener un ID único que sirva de semilla
     session = DeepWorkSession.objects.create(
         duration_minutes=duration,
         category=category,
         completed=False
     )
 
-    # Asigna a la Party que se eligió en la TUI
     if adventurer_ids:
         adventurers = Adventurer.objects.filter(id__in=adventurer_ids)
         session.adventurers_involved.set(adventurers)
         session.save()
+    else:
+        adventurers = []
 
-    # motor
-    result = process_session_completion(session.id)
+    # el Oráculo genera el destino
+    script = generate_session_script(session.id, duration, adventurers)
+
+    return Response({
+        "status": "success",
+        "session_id": session.id,
+        "script": script
+    })
+
+
+@api_view(['POST'])
+def complete_session(request):
+    """Cierra la sesión aplicando el botín ganado según el tiempo sobrevivido."""
+    data = request.data
+    session_id = data.get('session_id')
+    survived_seconds = data.get('survived_seconds')
+
+    if not session_id:
+        return Response({"status": "error", "message": "Falta el ID de la sesión."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # El motor procesa la realidad basándose en cuánto tiempo se aguantate sin distracciones, y devuelve el resultado de la expedición
+    result = process_session_completion(session_id, survived_seconds)
 
     if result.get("status") == "error":
         return Response(result, status=status.HTTP_400_BAD_REQUEST)
 
-    # Devuelve el botín, la XP y el log (MUD Log) a la terminal
     return Response({
         "status": "success",
-        "message": "Expedición finalizada con éxito.",
-        "log": session.event_log,
+        "message": "Expedición finalizada.",
+        "log": result.get("log", []),
         "engine_details": result
     })
 
