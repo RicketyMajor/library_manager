@@ -2,13 +2,12 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .models import GuildProfile, Adventurer, DeepWorkSession
-from .engine import process_session_completion, generate_session_script
+from .engine import process_session_completion, generate_session_script, consolidate_wealth
 
 
 @api_view(['GET'])
 def guild_status(request):
-    """Devuelve el estado general del Gremio y la lista de aventureros."""
-    # Obtiene o crea al Maestro del Gremio (Usuario)
+    """Devuelve el estado general del Gremio y la lista de aventureros con sus stats de RPG."""
     guild, _ = GuildProfile.objects.get_or_create(id=1)
     adventurers = Adventurer.objects.all()
 
@@ -22,11 +21,27 @@ def guild_status(request):
             "level": adv.level,
             "xp": adv.experience,
             "is_recovering": adv.is_recovering,
-            # Un pequeño resumen numérico de la riqueza para la tabla
-            "wealth_summary": f"{adv.iota} iotas, {adv.copper_penny} cp",
-            "weapon": adv.equipped_weapon.name if adv.equipped_weapon else "Desarmado",
-            "armor": adv.equipped_armor.name if adv.equipped_armor else "Ropa común",
-            "accessory": adv.equipped_accessory.name if adv.equipped_accessory else "Ninguno"
+            "wealth_summary": f"{adv.iota} iotas, {adv.copper_penny} copper pennies",
+
+            # --- STATS Y VIDA ---
+            "hp": f"{adv.current_hp}/{adv.max_hp}",
+            "str": adv.base_str,
+            "dex": adv.base_dex,
+            "con": adv.base_con,
+            "int": adv.base_int,
+            "wis": adv.base_wis,
+            "cha": adv.base_cha,
+            "luk": adv.base_luk,
+
+            # --- INVENTARIO (8 SLOTS) ---
+            "equip_main_hand": adv.equip_main_hand.name if adv.equip_main_hand else "Desarmado",
+            "equip_off_hand": adv.equip_off_hand.name if adv.equip_off_hand else "Vacío",
+            "equip_head": adv.equip_head.name if adv.equip_head else "Vacío",
+            "equip_torso": adv.equip_torso.name if adv.equip_torso else "Ropa común",
+            "equip_hands": adv.equip_hands.name if adv.equip_hands else "Vacío",
+            "equip_legs": adv.equip_legs.name if adv.equip_legs else "Vacío",
+            "equip_feet": adv.equip_feet.name if adv.equip_feet else "Vacío",
+            "equip_accessory": adv.equip_accessory.name if adv.equip_accessory else "Ninguno"
         })
 
     guild_data = {
@@ -52,6 +67,16 @@ def guild_status(request):
         "guild": guild_data,
         "adventurers": adv_data
     })
+
+
+@api_view(['POST'])
+def consolidate_guild_wealth(request):
+    """Llama al motor para consolidar la riqueza del gremio (Mesa del Cambista)."""
+    # El ID 1 siempre representa a tu Gremio principal
+    result = consolidate_wealth(1)
+    if result.get("status") == "error":
+        return Response(result, status=status.HTTP_400_BAD_REQUEST)
+    return Response(result)
 
 
 @api_view(['POST'])

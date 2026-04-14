@@ -40,9 +40,15 @@ class AdventurerGender(models.TextChoices):
 
 
 class ItemType(models.TextChoices):
-    # Tipos de equipamiento y objetos
-    WEAPON = 'WPN', 'Arma'
-    ARMOR = 'AMR', 'Armadura'
+    # Tipos de equipamiento granular
+    WEAPON_1H = 'W1H', 'Arma (1 Mano)'
+    WEAPON_2H = 'W2H', 'Arma (2 Manos)'
+    OFFHAND = 'OFF', 'Secundaria / Escudo'
+    HEAD = 'HED', 'Cabeza'
+    TORSO = 'TRS', 'Torso'
+    LEGS = 'LGS', 'Piernas'
+    HANDS = 'HND', 'Manos'
+    FEET = 'FET', 'Pies'
     ACCESSORY = 'ACC', 'Accesorio'
     CONSUMABLE = 'CNS', 'Consumible'
 
@@ -57,20 +63,28 @@ class ItemRarity(models.TextChoices):
 
 
 class Item(models.Model):
-    """Representa un objeto físico en el mundo (Armas, Armaduras, etc.)"""
+    """Representa un objeto físico en el mundo con impacto en estadísticas."""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     item_type = models.CharField(max_length=3, choices=ItemType.choices)
     rarity = models.CharField(
         max_length=3, choices=ItemRarity.choices, default=ItemRarity.COMMON)
-
-    # El valor base en la economía
     cost_in_copper = models.PositiveIntegerField(default=10)
 
-    # Modificador numérico. Ej: Un arma legendaria puede dar 0.15 (+15% de botín extra)
-    # Una armadura puede dar 0.20 (-20% probabilidad de resultar herido)
-    stat_modifier = models.FloatField(
-        default=0.0, help_text="Modificador matemático para el Oráculo")
+    # Modificadores de Combate
+    bonus_damage = models.PositiveIntegerField(
+        default=0, help_text="Suma al Daño (Armas)")
+    bonus_armor = models.PositiveIntegerField(
+        default=0, help_text="Suma a la Armadura (Ropa/Escudos)")
+
+    # Modificadores de Atributos RPG
+    bonus_str = models.IntegerField(default=0, verbose_name="Fuerza")
+    bonus_dex = models.IntegerField(default=0, verbose_name="Destreza")
+    bonus_con = models.IntegerField(default=0, verbose_name="Constitución")
+    bonus_int = models.IntegerField(default=0, verbose_name="Inteligencia")
+    bonus_wis = models.IntegerField(default=0, verbose_name="Sabiduría")
+    bonus_cha = models.IntegerField(default=0, verbose_name="Carisma")
+    bonus_luk = models.IntegerField(default=0, verbose_name="Suerte")
 
     def __str__(self):
         return f"{self.name} [{self.get_rarity_display()}]"
@@ -108,15 +122,39 @@ class Adventurer(WealthMixin):
     gender = models.CharField(
         max_length=1, choices=AdventurerGender.choices, default='O')
 
-    equipped_weapon = models.ForeignKey(
-        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='wielded_by', help_text="Aumenta el botín encontrado"
-    )
-    equipped_armor = models.ForeignKey(
-        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='worn_by', help_text="Reduce el riesgo de emboscadas"
-    )
-    equipped_accessory = models.ForeignKey(
-        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='carried_by', help_text="Aumenta la ganancia de experiencia"
-    )
+    # --- ESTADÍSTICAS BASE ---
+    base_str = models.PositiveIntegerField(default=1, verbose_name="Fuerza")
+    base_dex = models.PositiveIntegerField(default=1, verbose_name="Destreza")
+    base_con = models.PositiveIntegerField(
+        default=1, verbose_name="Constitución")
+    base_int = models.PositiveIntegerField(
+        default=1, verbose_name="Inteligencia")
+    base_wis = models.PositiveIntegerField(default=1, verbose_name="Sabiduría")
+    base_cha = models.PositiveIntegerField(default=1, verbose_name="Carisma")
+    base_luk = models.PositiveIntegerField(default=1, verbose_name="Suerte")
+
+    # --- VIDA ---
+    max_hp = models.PositiveIntegerField(default=20)
+    current_hp = models.IntegerField(default=20)
+
+    # --- INVENTARIO GRANULAR ---
+    equip_head = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_head')
+    equip_torso = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_torso')
+    equip_legs = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_legs')
+    equip_hands = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_hands')
+    equip_feet = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_feet')
+    equip_accessory = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_accessory')
+
+    equip_main_hand = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_main')
+    equip_off_hand = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_off')
 
     level = models.PositiveIntegerField(default=1)
     experience = models.PositiveIntegerField(default=0)
@@ -127,6 +165,14 @@ class Adventurer(WealthMixin):
 
     def __str__(self):
         return f"{self.name} - {self.get_adv_class_display()} (Nv. {self.level})"
+
+    def get_equipped_items(self):
+        """Retorna una lista filtrada con los objetos físicos que el personaje lleva puestos."""
+        return [i for i in [
+            self.equip_head, self.equip_torso, self.equip_legs,
+            self.equip_hands, self.equip_feet, self.equip_accessory,
+            self.equip_main_hand, self.equip_off_hand
+        ] if i is not None]
 
 
 class GuildProfile(WealthMixin):

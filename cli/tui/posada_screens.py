@@ -202,6 +202,60 @@ class CharacterCreationModal(ModalScreen[dict]):
             self.dismiss({"name": name, "adv_class": cls,
                          "race": race, "gender": gen})
 
+# --- MODAL DE DETALLES DEL AVENTURERO ---
+
+
+class AdventurerDetailsModal(ModalScreen[None]):
+    """Ficha de personaje RPG detallada."""
+
+    CSS = """
+    #adv_details_dialog { width: 70; height: auto; padding: 1 2; border: double $primary; background: $surface; }
+    .title_bar { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; }
+    .stats_grid { grid-size: 2; grid-columns: 1fr 1fr; grid-gutter: 1 2; margin-bottom: 1; border: solid $accent; padding: 1; }
+    .inv_grid { grid-size: 2; grid-columns: 1fr 1fr; grid-gutter: 0 1; border: solid $success; padding: 1; }
+    .section_title { color: $success; text-style: bold; }
+    #btn_close_details { width: 100%; margin-top: 1; }
+    """
+
+    def __init__(self, adv_data: dict, **kwargs):
+        super().__init__(**kwargs)
+        self.adv_data = adv_data
+
+    def compose(self) -> ComposeResult:
+        a = self.adv_data
+        with Vertical(id="adv_details_dialog"):
+            yield Label(f"📜 {a.get('name')} | {a.get('class_name')} | {a.get('race')}", classes="title_bar")
+            yield Label(f"Nivel {a.get('level')} | XP: {a.get('xp')} | ❤️ HP: {a.get('hp')}")
+
+            # Grilla de Estadísticas Base
+            yield Label("Atributos Base:", classes="section_title")
+            with Grid(classes="stats_grid"):
+                yield Label(f"Fuerza: {a.get('str')}")
+                yield Label(f"Inteligencia: {a.get('int')}")
+                yield Label(f"Destreza: {a.get('dex')}")
+                yield Label(f"Sabiduría: {a.get('wis')}")
+                yield Label(f"Constitución: {a.get('con')}")
+                yield Label(f"Carisma: {a.get('cha')}")
+                yield Label(f"Suerte: {a.get('luk')}")
+                yield Label(f"Riqueza: {a.get('wealth_summary')}")
+
+            # Grilla de Inventario (8 Slots)
+            yield Label("Inventario Equipado:", classes="section_title")
+            with Grid(classes="inv_grid"):
+                yield Label(f"Arma: {a.get('equip_main_hand', 'Desarmado')}")
+                yield Label(f"Secundaria: {a.get('equip_off_hand', 'Vacío')}")
+                yield Label(f"Cabeza: {a.get('equip_head', 'Vacío')}")
+                yield Label(f"Torso: {a.get('equip_torso', 'Ropa Común')}")
+                yield Label(f"Manos: {a.get('equip_hands', 'Vacío')}")
+                yield Label(f"Piernas: {a.get('equip_legs', 'Vacío')}")
+                yield Label(f"Pies: {a.get('equip_feet', 'Vacío')}")
+                yield Label(f"Accesorio: {a.get('equip_accessory', 'Vacío')}")
+
+            yield Button("Cerrar Ficha", variant="primary", id="btn_close_details")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_close_details":
+            self.dismiss(None)
 # --- PANTALLA PRINCIPAL ---
 
 
@@ -213,11 +267,12 @@ class PosadaMainScreen(Screen):
     is_countdown = reactive(True)
 
     BINDINGS = [
-        ("escape", "app.pop_screen", "Volver al Launcher"),
-        ("q", "app.quit", "Salir de Bunker"),
         ("c", "setup_timer", "Configurar Expedición"),
         ("p", "pause_timer", "Pausar / Continuar"),
-        ("s", "stop_timer", "Detener / Huir")
+        ("s", "stop_timer", "Detener / Huir"),
+        ("d", "show_details", "Ver Detalles (Gremio)"),
+        ("escape", "app.pop_screen", "Volver al Launcher"),
+        ("q", "app.quit", "Salir de Bunker"),
     ]
 
     CSS = """
@@ -310,6 +365,22 @@ class PosadaMainScreen(Screen):
         except Exception as e:
             pass
 
+    @work(thread=True)
+    def request_consolidation(self) -> None:
+        try:
+            resp = httpx.post(
+                f"{API_POSADA_BASE}guild/consolidate/", timeout=5.0)
+            if resp.status_code == 200:
+                self.app.call_from_thread(
+                    self.app.notify, "El Cambista ha consolidado tus monedas de menor valor.", severity="success")
+                self.sync_guild_status()
+            else:
+                self.app.call_from_thread(
+                    self.app.notify, "Error al consolidar riqueza.", severity="error")
+        except Exception:
+            self.app.call_from_thread(
+                self.app.notify, "El Cambista no responde.", severity="error")
+
     def render_guild_status(self, data: dict) -> None:
         """Actualiza los paneles del Gremio con los datos de Django."""
         guild = data.get("guild", {})
@@ -329,17 +400,15 @@ class PosadaMainScreen(Screen):
         for adv in adventurers:
             status = "Enfermería" if adv.get("is_recovering") else "Disponible"
 
-            # --- FORMATEA EL EQUIPAMIENTO PARA LA TERMINAL ---
-            equip_str = f"⚔️ {adv.get('weapon')} | 🛡️ {adv.get('armor')} | 💍 {adv.get('accessory')}"
+            # En la tabla principal muestra solo un resumen rápido
+            resumen_equipo = "Ver Detalles (d)"
 
+            # key=str(adv['id']) ancla la fila de la tabla a la base de datos
             table_adv.add_row(
-                adv["name"],
-                adv["class_name"],
-                str(adv["level"]),
-                str(adv["xp"]),
-                adv["wealth_summary"],
-                equip_str,  # Inserta el string en la tabla
-                status
+                adv["name"], adv["class_name"], str(
+                    adv["level"]), str(adv["xp"]),
+                adv["wealth_summary"], resumen_equipo, status,
+                key=str(adv["id"])
             )
 
         # SI EL GREMIO ESTÁ VACÍO, FUERZA LA CREACIÓN DEL AVATAR
@@ -436,10 +505,14 @@ class PosadaMainScreen(Screen):
 
     # --- BINDINGS Y EVENTOS DE INTERFAZ ---
     def action_setup_timer(self) -> None:
+        if self.query_one(TabbedContent).active != "tab_timer":
+            return
         if not self.timer_active:
             self.app.push_screen(SessionSetupModal(), self.prepare_session)
 
     def action_pause_timer(self) -> None:
+        if self.query_one(TabbedContent).active != "tab_timer":
+            return
         if self.timer_active:
             self.clock_ticker.pause()
             self.timer_active = False
@@ -448,6 +521,8 @@ class PosadaMainScreen(Screen):
                 "La expedición se detiene. Los monstruos acechan...")
 
     def action_resume_timer(self) -> None:
+        if self.query_one(TabbedContent).active != "tab_timer":
+            return
         if not self.timer_active and self.time_seconds > 0:
             self.clock_ticker.resume()
             self.timer_active = True
@@ -456,6 +531,8 @@ class PosadaMainScreen(Screen):
                 "Se reanuda la marcha en la oscuridad.")
 
     def action_stop_timer(self) -> None:
+        if self.query_one(TabbedContent).active != "tab_timer":
+            return
         if self.timer_active or self.query_one("#btn_resume_timer", Button).display:
             self.clock_ticker.pause()
             self.timer_active = False
@@ -472,6 +549,26 @@ class PosadaMainScreen(Screen):
             self.action_resume_timer()
         elif event.button.id == "btn_stop_timer":
             self.action_stop_timer()
+        elif event.button.id == "btn_consolidate":
+            # Llama a la API para ir al cambista
+            self.request_consolidation()
+
+    def action_show_details(self) -> None:
+        """Abre la ficha del personaje seleccionado en la tabla del Gremio."""
+        if self.query_one(TabbedContent).active != "tab_guild":
+            return
+        table = self.query_one("#all_adventurers_table", DataTable)
+        try:
+            # Obtiene la fila donde está el cursor
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key
+            # Busca en el caché el aventurero que coincida con esa llave
+            adv_data = next(a for a in getattr(
+                self, 'adventurers_cache', []) if str(a['id']) == row_key.value)
+            self.app.push_screen(AdventurerDetailsModal(adv_data))
+        except Exception:
+            self.app.notify(
+                "Selecciona un aventurero de la tabla primero.", severity="warning")
 
     # --- FLUJO DE INICIO MUD (PRE-CÁLCULO) ---
     def prepare_session(self, result: dict | None) -> None:

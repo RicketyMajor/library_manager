@@ -7,4 +7,6 @@ urlpatterns = [
     path('api/session/complete/', views.complete_session, name='complete_session'),
     path('api/adventurer/create/', views.create_adventurer,
          name='create_adventurer'),
+    path('api/guild/consolidate/', views.consolidate_guild_wealth,
+         name='consolidate_wealth'),
 ]
