@@ -39,6 +39,43 @@ class AdventurerGender(models.TextChoices):
     OTHER = 'O', 'Otro / Misterioso'
 
 
+class ItemType(models.TextChoices):
+    # Tipos de equipamiento y objetos
+    WEAPON = 'WPN', 'Arma'
+    ARMOR = 'AMR', 'Armadura'
+    ACCESSORY = 'ACC', 'Accesorio'
+    CONSUMABLE = 'CNS', 'Consumible'
+
+
+class ItemRarity(models.TextChoices):
+    # Niveles de rareza
+    COMMON = 'COM', 'Común'
+    UNCOMMON = 'UNC', 'Poco Común'
+    RARE = 'RAR', 'Raro'
+    EPIC = 'EPC', 'Épico'
+    LEGENDARY = 'LEG', 'Legendario'
+
+
+class Item(models.Model):
+    """Representa un objeto físico en el mundo (Armas, Armaduras, etc.)"""
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    item_type = models.CharField(max_length=3, choices=ItemType.choices)
+    rarity = models.CharField(
+        max_length=3, choices=ItemRarity.choices, default=ItemRarity.COMMON)
+
+    # El valor base en la economía
+    cost_in_copper = models.PositiveIntegerField(default=10)
+
+    # Modificador numérico. Ej: Un arma legendaria puede dar 0.15 (+15% de botín extra)
+    # Una armadura puede dar 0.20 (-20% probabilidad de resultar herido)
+    stat_modifier = models.FloatField(
+        default=0.0, help_text="Modificador matemático para el Oráculo")
+
+    def __str__(self):
+        return f"{self.name} [{self.get_rarity_display()}]"
+
+
 class WealthMixin(models.Model):
     """Modelo abstracto que otorga la economía completa de la Mancomunidad a cualquier entidad."""
     iron_half_penny = models.PositiveIntegerField(
@@ -69,7 +106,17 @@ class Adventurer(WealthMixin):
     adv_class = models.CharField(max_length=3, choices=AdventurerClass.choices)
     race = models.CharField(max_length=3, choices=AdventurerRace.choices)
     gender = models.CharField(
-        max_length=1, choices=AdventurerGender.choices, default='O')  # <--- NUEVO CAMPO
+        max_length=1, choices=AdventurerGender.choices, default='O')
+
+    equipped_weapon = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='wielded_by', help_text="Aumenta el botín encontrado"
+    )
+    equipped_armor = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='worn_by', help_text="Reduce el riesgo de emboscadas"
+    )
+    equipped_accessory = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='carried_by', help_text="Aumenta la ganancia de experiencia"
+    )
 
     level = models.PositiveIntegerField(default=1)
     experience = models.PositiveIntegerField(default=0)

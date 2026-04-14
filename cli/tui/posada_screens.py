@@ -286,7 +286,7 @@ class PosadaMainScreen(Screen):
             "Nombre", "Clase", "Raza", "Nivel", "Estado")
         table_adv = self.query_one("#all_adventurers_table", DataTable)
         table_adv.add_columns("Nombre", "Clase", "Nivel",
-                              "XP", "Riqueza", "Estado")
+                              "XP", "Riqueza", "Equipamiento", "Estado")
         self.query_one("#missions_table", DataTable).add_columns(
             "Misión", "Recompensa Base", "Estado")
 
@@ -328,10 +328,21 @@ class PosadaMainScreen(Screen):
         table_adv.clear()
         for adv in adventurers:
             status = "Enfermería" if adv.get("is_recovering") else "Disponible"
-            table_adv.add_row(adv["name"], adv["class_name"], str(
-                adv["level"]), str(adv["xp"]), adv["wealth_summary"], status)
 
-        # SI EL GREMIO ESTÁ VACÍO, fuerza LA CREACIÓN DEL AVATAR
+            # --- FORMATEA EL EQUIPAMIENTO PARA LA TERMINAL ---
+            equip_str = f"⚔️ {adv.get('weapon')} | 🛡️ {adv.get('armor')} | 💍 {adv.get('accessory')}"
+
+            table_adv.add_row(
+                adv["name"],
+                adv["class_name"],
+                str(adv["level"]),
+                str(adv["xp"]),
+                adv["wealth_summary"],
+                equip_str,  # Inserta el string en la tabla
+                status
+            )
+
+        # SI EL GREMIO ESTÁ VACÍO, FUERZA LA CREACIÓN DEL AVATAR
         if not adventurers:
             self.app.push_screen(CharacterCreationModal(),
                                  self.submit_new_character)

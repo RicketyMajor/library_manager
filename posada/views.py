@@ -22,8 +22,11 @@ def guild_status(request):
             "level": adv.level,
             "xp": adv.experience,
             "is_recovering": adv.is_recovering,
-            # Un pequeño resumen numérico de su riqueza para la tabla
-            "wealth_summary": f"{adv.iota} iotas, {adv.copper_penny} cp"
+            # Un pequeño resumen numérico de la riqueza para la tabla
+            "wealth_summary": f"{adv.iota} iotas, {adv.copper_penny} cp",
+            "weapon": adv.equipped_weapon.name if adv.equipped_weapon else "Desarmado",
+            "armor": adv.equipped_armor.name if adv.equipped_armor else "Ropa común",
+            "accessory": adv.equipped_accessory.name if adv.equipped_accessory else "Ninguno"
         })
 
     guild_data = {
