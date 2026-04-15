@@ -301,10 +301,18 @@ def complete_habit(request):
         }
         r = rewards.get(habit.difficulty)
 
-        # Otorga XP al Gremio y a todos los aventureros
+        # Otorga XP al Gremio y verifica si sube de nivel
+        old_level = guild.level
         guild.experience += r['xp']
         setattr(guild, r['coin'], getattr(guild, r['coin']) + r['amt'])
+
+        while guild.experience >= 500:
+            guild.level += 1
+            guild.experience -= 500
+
         guild.save()
+
+        lvl_msg = f" ¡Gremio Nv. {guild.level}!" if guild.level > old_level else ""
 
         for adv in adventurers:
             adv.experience += r['xp']
@@ -318,7 +326,7 @@ def complete_habit(request):
 
         return Response({
             "status": "success",
-            "message": f"¡Hábito '{habit.name}' completado! +{r['xp']} XP y {r['amt']} {r['coin']}. Fatiga reducida."
+            "message": f"¡Hábito '{habit.name}' completado! +{r['xp']} XP y {r['amt']} {r['coin']}. Fatiga reducida.{lvl_msg}"
         })
     except DailyHabit.DoesNotExist:
         return Response({"status": "error", "message": "Hábito no encontrado."}, status=404)

@@ -315,6 +315,31 @@ class NewHabitModal(ModalScreen[dict]):
             else:
                 self.app.notify(
                     "El hábito necesita un nombre.", severity="error")
+# --- PESTAÑAS ---
+
+
+class TimerTab(TabPane):
+    can_focus = True
+    BINDINGS = [("c", "setup_timer", "Configurar"), ("p", "pause_timer",
+                                                     "Pausar/Seguir"), ("s", "stop_timer", "Detener")]
+
+
+class GuildTab(TabPane):
+    can_focus = True
+    BINDINGS = [("d", "show_details", "Detalles"), ("x", "delete_adventurer",
+                                                    "Eliminar"), ("n", "new_adventurer", "Nuevo Avatar")]
+
+
+class TavernTab(TabPane):
+    can_focus = True
+    BINDINGS = [("r", "recruit", "Reclutar"),
+                ("f", "refresh_tavern", "Invitar Rondas")]
+
+
+class MissionsTab(TabPane):
+    can_focus = True
+    BINDINGS = [("m", "complete_habit", "Marcar Hecho"),
+                ("+", "add_habit", "Añadir Hábito")]
 
 # --- PANTALLA PRINCIPAL ---
 
@@ -327,17 +352,12 @@ class PosadaMainScreen(Screen):
     is_countdown = reactive(True)
 
     BINDINGS = [
-        ("c", "setup_timer", "Configurar Expedición"),
-        ("p", "pause_timer", "Pausar / Continuar"),
-        ("s", "stop_timer", "Detener / Huir"),
-        ("d", "show_details", "Ver Detalles (Gremio)"),
-        ("x", "delete_adventurer", "Eliminar (Gremio)"),
-        ("r", "recruit", "Reclutar (Taberna)"),
-        ("f", "refresh_tavern", "Invitar Rondas [Refrescar] (Taberna)"),
-        ("m", "complete_habit", "Marcar Hecho (Misiones)"),
-        ("+", "add_habit", "Añadir Hábito (Misiones)"),
         ("escape", "app.pop_screen", "Volver al Launcher"),
         ("q", "app.quit", "Salir de Bunker"),
+        ("1", "switch_tab('tab_timer')", "Sala de Enfoque"),
+        ("2", "switch_tab('tab_guild')", "El Gremio"),
+        ("3", "switch_tab('tab_tavern')", "La Taberna"),
+        ("4", "switch_tab('tab_missions')", "Misiones"),
     ]
 
     CSS = """
@@ -365,7 +385,7 @@ class PosadaMainScreen(Screen):
         with Vertical(id="posada_root"):
             with TabbedContent(initial="tab_timer"):
 
-                with TabPane("Sala de Enfoque", id="tab_timer"):
+                with TimerTab("Sala de Enfoque", id="tab_timer"):
                     with Horizontal(id="focus_layout"):
 
                         # Columna Izquierda
@@ -389,7 +409,7 @@ class PosadaMainScreen(Screen):
                             yield Label("📜 Registro de Eventos")
                             yield Log(id="event_log", highlight=True)
 
-                with TabPane("El Gremio", id="tab_guild"):
+                with GuildTab("El Gremio (Bóveda)", id="tab_guild"):
                     with Vertical(classes="guild_stats"):
                         yield Label("Cargando...", id="lbl_guild_level")
                         yield Label("Cargando bóveda...", id="lbl_guild_vault")
@@ -397,14 +417,14 @@ class PosadaMainScreen(Screen):
                     yield Label("Todos los Aventureros Reclutados:")
                     yield DataTable(id="all_adventurers_table")
 
-                with TabPane("La Taberna", id="tab_tavern"):
+                with TavernTab("La Taberna", id="tab_tavern"):
                     yield Label("Aventureros buscando un Gremio (Nivel 1):", classes="section_title")
                     yield DataTable(id="tavern_table")
                     with Horizontal(classes="timer_buttons"):
                         yield Button("Reclutar Seleccionado (r)", id="btn_recruit", variant="success")
                         yield Button("Invitar Rondas (f)", id="btn_refresh_tavern", variant="primary")
 
-                with TabPane("Tablón de Misiones", id="tab_missions"):
+                with MissionsTab("Tablón de Misiones", id="tab_missions"):
                     with Horizontal():
                         # Los Hábitos
                         with Vertical(id="habits_col", classes="half_width"):
@@ -439,6 +459,7 @@ class PosadaMainScreen(Screen):
         self.sync_guild_status()
         self.fetch_missions_data()
         self.set_timer_ui_state("idle")
+        self.query_one("#tab_timer").focus()
 
     # --- LLAMADAS A LA API ---
     @work(thread=True)
@@ -665,6 +686,14 @@ class PosadaMainScreen(Screen):
         except Exception:
             self.app.notify(
                 "Selecciona un aventurero de la tabla primero.", severity="warning")
+
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        """Al cambiar de pestaña (con mouse o teclado), le damos el Foco para que el Footer actualice."""
+        event.pane.focus()
+
+    def action_switch_tab(self, tab_id: str) -> None:
+        """Acción para cambiar de pestaña con los números (1, 2, 3, 4)."""
+        self.query_one(TabbedContent).active = tab_id
 
     # --- FLUJO DE INICIO MUD (PRE-CÁLCULO) ---
     def prepare_session(self, result: dict | None) -> None:

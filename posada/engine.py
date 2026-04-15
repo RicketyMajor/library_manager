@@ -385,6 +385,7 @@ def process_session_completion(session_id, survived_seconds=None):
     survived_minutes = survived_seconds // 60
     base_xp = survived_minutes * XP_PER_MINUTE
     guild.experience += base_xp
+    check_guild_level_up(guild, event_log)
     event_log.append(
         f"El Gremio gana {base_xp} XP base por sobrevivir {survived_minutes} min.")
 
@@ -461,6 +462,18 @@ def check_level_up(adv, event_log):
         # Llamada recursiva por si ganó muchísima XP de golpe
         check_level_up(adv, event_log)
 
+
+def check_guild_level_up(guild, event_log):
+    """Comprueba si el Gremio (Usuario) sube de nivel (cada 500 XP fijos)."""
+    leveled_up = False
+    while guild.experience >= 500:
+        guild.level += 1
+        guild.experience -= 500
+        leveled_up = True
+
+    if leveled_up:
+        event_log.append(
+            f"¡Ascenso! Tu Gremio sube al Nivel {guild.level}. Ahora puedes reclutar más aventureros.")
 # --- LÓGICA BANCARIA Y MERCADO ---
 
 
