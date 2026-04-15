@@ -14,6 +14,18 @@ def guild_status(request):
 
     adv_data = []
     for adv in adventurers:
+        mods = adv.get_stat_modifiers()
+
+        def fmt_stat(base, stat_key):
+            """Genera el texto enriquecido para la TUI (Ej: 15 [+2])"""
+            mod = mods.get(stat_key, 0)
+            total = base + mod
+            if mod > 0:
+                return f"{total} [bold green](+{mod})[/bold green]"
+            elif mod < 0:
+                return f"{total} [bold red]({mod})[/bold red]"
+            return str(total)
+
         adv_data.append({
             "id": adv.id,
             "name": adv.name,
@@ -21,7 +33,21 @@ def guild_status(request):
             "race": adv.get_race_display(),
             "level": adv.level,
             "xp": adv.experience,
-            "is_recovering": adv.is_recovering,
+            "hp": f"{adv.current_hp}/{adv.max_hp}",
+
+            # --- Estadísticas Formateadas con Color ---
+            "str": fmt_stat(adv.base_str, 'str'),
+            "dex": fmt_stat(adv.base_dex, 'dex'),
+            "con": fmt_stat(adv.base_con, 'con'),
+            "int": fmt_stat(adv.base_int, 'int'),
+            "wis": fmt_stat(adv.base_wis, 'wis'),
+            "cha": fmt_stat(adv.base_cha, 'cha'),
+            "luk": fmt_stat(adv.base_luk, 'luk'),
+
+            # --- Combate Real ---
+            "combat_armor": mods['armor'],
+            "combat_damage": mods['damage'],
+
             "wealth": {
                 "iron_half_penny": adv.iron_half_penny, "iron_penny": adv.iron_penny,
                 "ardite": adv.ardite, "drabin": adv.drabin, "copper_penny": adv.copper_penny,
@@ -29,12 +55,6 @@ def guild_status(request):
                 "talento": adv.talento, "real": adv.real, "marco": adv.marco
             },
             "wealth_summary": f"{adv.talento}T, {adv.iota}i, {adv.ardite}a",
-            # --- STATS Y VIDA ---
-            "str": adv.base_str, "dex": adv.base_dex, "con": adv.base_con,
-            "int": adv.base_int, "wis": adv.base_wis, "cha": adv.base_cha, "luk": adv.base_luk,
-            "hp": adv.current_hp, "max_hp": adv.max_hp,
-
-            # --- INVENTARIO (8 SLOTS) ---
             "equip_main_hand": adv.equip_main_hand.name if adv.equip_main_hand else "Desarmado",
             "equip_off_hand": adv.equip_off_hand.name if adv.equip_off_hand else "Vacío",
             "equip_head": adv.equip_head.name if adv.equip_head else "Vacío",
@@ -141,7 +161,7 @@ def create_adventurer(request):
     """Crea un aventurero. Verifica el límite de cupos del Gremio."""
     guild, _ = GuildProfile.objects.get_or_create(id=1)
 
-    # SISTEMA DE LÍMITE: 1 cupo por cada Nivel del Gremio
+    # 1 cupo por cada Nivel del Gremio
     if Adventurer.objects.count() >= guild.level:
         return Response({
             "status": "error",
@@ -165,7 +185,7 @@ def create_adventurer(request):
         base_luk=stats['luk'] if stats else 0
     )
 
-    # Si es tu primer avatar manual (sin stats), el destino reparte los 13 pts.
+    # Si es el primer avatar manual, reparte al azar los 13 pts.
     if not stats:
         distribute_random_stats(adv, 13)
 

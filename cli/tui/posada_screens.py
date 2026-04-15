@@ -230,7 +230,7 @@ class AdventurerDetailsModal(ModalScreen[None]):
             # Usamos VerticalScroll para que quepa todo
             with VerticalScroll():
                 yield Label(f"❤️ HP: {a.get('hp')} | Nivel {a.get('level')} ({a.get('xp')} XP)")
-
+                # --- SECCIÓN DE ATRIBUTOS ---
                 yield Label("Atributos:", classes="section_title")
                 with Grid(classes="stats_grid"):
                     yield Label(f"💪 Fuerza: {a.get('str')}")
@@ -240,7 +240,7 @@ class AdventurerDetailsModal(ModalScreen[None]):
                     yield Label(f"🛡️ Constitución: {a.get('con')}")
                     yield Label(f"🗣️ Carisma: {a.get('cha')}")
                     yield Label(f"🍀 Suerte: {a.get('luk')}")
-
+                # --- SECCIÓN DE EQUIPO ---
                 yield Label("Equipo:", classes="section_title")
                 with Grid(classes="inv_grid"):
                     yield Label(f"🗡️ Mano Principal: {a.get('equip_main_hand')}")
@@ -253,20 +253,26 @@ class AdventurerDetailsModal(ModalScreen[None]):
                     yield Label(f"📿 Accesorio: {a.get('equip_accessory')}")
                     yield Label("")
 
-                yield Label("Bóveda Personal (Todas las Monedas):", classes="section_title")
+                # --- SECCIÓN DE COMBATE ---
+                yield Label("Efectividad en Combate:", classes="section_title")
+                with Grid(classes="stats_grid"):
+                    yield Label(f"⚔️ Daño Base Aumentado: +{a.get('combat_damage')}")
+                    yield Label(f"🛡️ Armadura Total: {a.get('combat_armor')}")
+                # --- SECCIÓN DE RIQUEZA ---
+                yield Label("Tesoro Personal:", classes="section_title")
                 w = a.get('wealth', {})
                 with Grid(classes="wealth_grid"):
-                    yield Label(f"🟤 1/2 P. Hierro: {w.get('iron_half_penny', 0)}")
-                    yield Label(f"🔘 P. Hierro: {w.get('iron_penny', 0)}")
-                    yield Label(f"⚪ Ardite: {w.get('ardite', 0)}")
-                    yield Label(f"🪙 Drabín: {w.get('drabin', 0)}")
-                    yield Label(f"🟠 P. Cobre: {w.get('copper_penny', 0)}")
-                    yield Label(f"🔹 Iota: {w.get('iota', 0)}")
-                    yield Label(f"⚪ P. Plata: {w.get('silver_penny', 0)}")
-                    yield Label(f"⚜️ Sueldo: {w.get('sueldo', 0)}")
-                    yield Label(f"🔱 Talento: {w.get('talento', 0)}")
-                    yield Label(f"🔷 Real: {w.get('real', 0)}")
                     yield Label(f"👑 Marco: {w.get('marco', 0)}")
+                    yield Label(f"🔷 Real: {w.get('real', 0)}")
+                    yield Label(f"🔱 Talento: {w.get('talento', 0)}")
+                    yield Label(f"⚜️ Sueldo: {w.get('sueldo', 0)}")
+                    yield Label(f"⚪ P. Plata: {w.get('silver_penny', 0)}")
+                    yield Label(f"🔹 Iota: {w.get('iota', 0)}")
+                    yield Label(f"🟠 P. Cobre: {w.get('copper_penny', 0)}")
+                    yield Label(f"🪙 Drabín: {w.get('drabin', 0)}")
+                    yield Label(f"⚪ Ardite: {w.get('ardite', 0)}")
+                    yield Label(f"🔘 P. Hierro: {w.get('iron_penny', 0)}")
+                    yield Label(f"🟤 1/2 P. Hierro: {w.get('iron_half_penny', 0)}")
 
             yield Button("Cerrar Ficha", variant="primary", id="btn_close_details")
 
@@ -424,7 +430,11 @@ class PosadaMainScreen(Screen):
             f"Nivel del Maestro: {guild.get('level')} | XP: {guild.get('xp')}")
 
         inv = guild.get("inventory", {})
-        vault_text = f"Bóveda: {inv.get('marco', 0)} Marcos, {inv.get('talento', 0)} Talentos, {inv.get('sueldo', 0)} Sueldos, {inv.get('iota', 0)} Iotas, {inv.get('ardite', 0)} Ardites"
+        vault_text = (
+            f"👑 Marcos: {inv.get('marco', 0)} | 🔷 Reales: {inv.get('real', 0)} | 🔱 Talentos: {inv.get('talento', 0)} | ⚜️ Sueldos: {inv.get('sueldo', 0)}\n"
+            f"⚪ P. Plata: {inv.get('silver_penny', 0)} | 🔹 Iotas: {inv.get('iota', 0)} | 🟠 P. Cobre: {inv.get('copper_penny', 0)} | 🪙 Drabines: {inv.get('drabin', 0)}\n"
+            f"⚪ Ardites: {inv.get('ardite', 0)} | 🔘 P. Hierro: {inv.get('iron_penny', 0)} | 🟤 1/2 P. Hierro: {inv.get('iron_half_penny', 0)}"
+        )
         self.query_one("#lbl_guild_vault", Label).update(vault_text)
 
         table_adv = self.query_one("#all_adventurers_table", DataTable)

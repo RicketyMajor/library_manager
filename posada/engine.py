@@ -6,6 +6,23 @@ XP_PER_MINUTE = 10
 # Bono si la clase del aventurero hace sinergia con la tarea
 XP_MULTIPLIER_CLASS_MATCH = 1.5
 
+# --- SINERGIAS DE CATEGORÍA ---
+# Si la tarea escrita en la TUI coincide con una clave, las clases listadas ganan +50% XP
+CATEGORY_SYNERGY = {
+    "programacion": ["WIZ", "ART"],
+    "sistemas distribuidos": ["ART", "WIZ", "SOR"],
+    "telecomunicaciones": ["ART", "BRD"],
+    "codigo": ["WIZ", "ART"],
+    "gimnasio": ["BBN", "FTR", "MNK"],
+    "ejercicio": ["BBN", "FTR", "MNK"],
+    "ingles": ["BRD", "SOR", "WLK"],
+    "idiomas": ["BRD", "SOR", "WLK"],
+    "estudio": ["CLR", "PAL", "WIZ"],
+    "lectura": ["WIZ", "BRD", "CLR"],
+    "matematicas": ["ART", "WIZ"],
+    "ayudantia": ["BRD", "CLR", "PAL"]
+}
+
 
 def generate_session_script(session_id, duration_minutes, adventurers_qs):
     random.seed(session_id)
@@ -17,93 +34,115 @@ def generate_session_script(session_id, duration_minutes, adventurers_qs):
         random.seed()
         return script
 
-    # Eventos de Botín Menor (Ardites)
+    # 1. Botín Constante (Cada minuto: 1/2 Hierro, Hierro, Ardites)
     for m in range(duration_minutes):
         sec = (m * 60) + random.randint(5, 55)
         adv = random.choice(adventurers)
+        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
 
-        # Aumenta la cantidad de ardites base
-        weapon_bonus = adv.equipped_weapon.stat_modifier if adv.equipped_weapon else 0.0
-        # Ej: stat 0.10 -> +1 ardite
-        amount = random.randint(1, 3) + int(weapon_bonus * 10)
+        # Siempre encuentras Medios Peniques de Hierro
+        hp_amount = random.randint(2, 5) + luk_bonus
+        script.append({"second": sec, "type": "loot", "coin": "iron_half_penny", "amount": hp_amount,
+                      "message": f"{adv.name} recogió {hp_amount} medio(s) penique(s) de hierro."})
 
-        script.append({
-            "second": sec, "type": "loot", "coin": "ardite", "amount": amount,
-            "message": f"{adv.name} ha encontrado {amount} ardite(s)."
-        })
+        if random.random() < 0.80:
+            script.append({"second": sec+1, "type": "loot", "coin": "iron_penny",
+                          "amount": random.randint(1, 2), "message": f"{adv.name} encontró peniques de hierro."})
+        if random.random() < 0.60:
+            script.append({"second": sec+2, "type": "loot", "coin": "ardite",
+                          "amount": random.randint(1, 3), "message": f"{adv.name} halló un par de ardites."})
 
-    # 2. Eventos de Botín Mayor (Cobre, Plata)
-    if duration_minutes >= 25:
-        blocks = duration_minutes // 25
-        for i in range(blocks):
-            adv = random.choice(adventurers)
-            weapon_bonus = adv.equipped_weapon.stat_modifier if adv.equipped_weapon else 0.0
+    # Botín Intermedio (Cada 10 minutos: Cobre y Drabines)
+    blocks_10 = duration_minutes // 10
+    for i in range(blocks_10):
+        adv = random.choice(adventurers)
+        sec = random.randint(i * 600, (i+1) * 600 - 1)
+        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
 
-            # BONUS DE ARMA: Aumenta la probabilidad de drop (ej: 0.60 + 0.10 = 70%)
-            if random.random() < (0.60 + weapon_bonus):
-                sec = random.randint(i * 1500, (i+1) * 1500 - 1)
-                script.append({
-                    "second": sec, "type": "loot", "coin": "iota", "amount": 1,
-                    "message": f"{adv.name} ha desenterrado 1 Iota brillante."
-                })
+        if random.random() < (0.60 + (luk_bonus * 0.02)):
+            script.append({"second": sec, "type": "loot", "coin": "drabin",
+                          "amount": 1, "message": f"{adv.name} desenterró 1 Drabín."})
+        if random.random() < (0.40 + (luk_bonus * 0.02)):
+            script.append({"second": sec+1, "type": "loot", "coin": "copper_penny",
+                          "amount": 1, "message": f"{adv.name} encontró 1 Penique de Cobre."})
 
-    if duration_minutes >= 50:
-        blocks = duration_minutes // 50
-        for i in range(blocks):
-            adv = random.choice(adventurers)
-            weapon_bonus = adv.equipped_weapon.stat_modifier if adv.equipped_weapon else 0.0
-            sec = random.randint(i * 3000, (i+1) * 3000 - 1)
+    # Botín Mayor (Cada 25 minutos: Iotas y Plata)
+    blocks_25 = duration_minutes // 25
+    for i in range(blocks_25):
+        adv = random.choice(adventurers)
+        sec = random.randint(i * 1500, (i+1) * 1500 - 1)
+        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
 
-            if random.random() < (0.30 + (weapon_bonus / 2)):
-                script.append({"second": sec, "type": "loot", "coin": "sueldo",
-                              "amount": 1, "message": f"{adv.name} encontró 1 Sueldo de plata."})
-            elif random.random() < (0.05 + (weapon_bonus / 5)):
-                script.append({"second": sec, "type": "loot", "coin": "talento",
-                              "amount": 1, "message": f"¡UN TALENTO! {adv.name} ríe de alegría."})
+        if random.random() < (0.50 + (luk_bonus * 0.02)):
+            script.append({"second": sec, "type": "loot", "coin": "iota", "amount": 1,
+                          "message": f"{adv.name} desenterró 1 Iota brillante."})
+        if random.random() < (0.25 + (luk_bonus * 0.02)):
+            script.append({"second": sec+1, "type": "loot", "coin": "silver_penny",
+                          "amount": 1, "message": f"¿Qué es lo que brilla? {adv.name} encontró 1 Penique de Plata."})
 
-    # Revisa el historial total de esfuerzo de tu Gremio
+    # 4. Botín Épico (Cada 50 minutos: Sueldos, Talentos, Reales)
+    blocks_50 = duration_minutes // 50
+    for i in range(blocks_50):
+        adv = random.choice(adventurers)
+        sec = random.randint(i * 3000, (i+1) * 3000 - 1)
+        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
+
+        if random.random() < (0.30 + (luk_bonus * 0.02)):
+            script.append({"second": sec, "type": "loot", "coin": "sueldo",
+                          "amount": 1, "message": f"{adv.name} encontró 1 Sueldo de plata."})
+        elif random.random() < (0.10 + (luk_bonus * 0.01)):
+            script.append({"second": sec+1, "type": "loot", "coin": "talento",
+                          "amount": 1, "message": f"¡UN TALENTO! {adv.name} ríe de alegría."})
+        elif random.random() < (0.02 + (luk_bonus * 0.01)):
+            script.append({"second": sec+2, "type": "loot", "coin": "real", "amount": 1,
+                          "message": f"¡INCREÍBLE! {adv.name} ha encontrado un REAL en perfecto estado."})
+
+    # (A partir de aquí, deja el código del Pity System del Marco de Oro tal como estaba)
+
+    # Pity System del Marco de Oro
     total_history = DeepWorkSession.objects.filter(completed=True).aggregate(
         Sum('duration_minutes'))['duration_minutes__sum'] or 0
-
-    # Si esta sesión hace que cruces un umbral de 10 horas (600 minutos), fuerza un Marco
     if (total_history % 600) + duration_minutes >= 600:
         adv = random.choice(adventurers)
         sec = random.randint(10, total_seconds - 10)
         script.append({"second": sec, "type": "loot", "coin": "marco", "amount": 1,
                       "message": f"¡GLORIA! La persistencia rinde frutos. {adv.name} ha desenterrado un MARCO DE ORO."})
 
-    # Emboscadas (Riesgo de Enfermería)
+    # Combate Real
     ambush_blocks = duration_minutes // 20
     for i in range(ambush_blocks):
         adv = random.choice(adventurers)
-        # Reduce la probabilidad matemática de la emboscada
-        armor_bonus = adv.equipped_armor.stat_modifier if adv.equipped_armor else 0.0
-        ambush_chance = max(0.01, 0.25 - armor_bonus)
+
+        # ARMADURA Y CONSTITUCIÓN reducen el riesgo
+        armor_val = sum(item.bonus_armor for item in adv.get_equipped_items())
+        con_val = adv.base_con + \
+            sum(item.bonus_con for item in adv.get_equipped_items())
+
+        ambush_chance = max(0.05, 0.40 - (armor_val * 0.02) - (con_val * 0.01))
 
         if random.random() < ambush_chance:
             sec = random.randint(i * 1200, (i+1) * 1200 - 1)
+            # El daño real considera la armadura como mitigación
+            damage = random.randint(8, 18) - armor_val
+            damage = max(1, damage)
             script.append({
-                "second": sec, "type": "injury", "adventurer_id": adv.id,
-                "message": f"¡EMBOSCADA! {adv.name} no pudo bloquear el golpe y está gravemente herido."
+                "second": sec, "type": "damage", "adventurer_id": adv.id, "amount": damage,
+                "message": f"¡EMBOSCADA! {adv.name} recibe {damage} de daño."
             })
         else:
             sec = random.randint(i * 1200, (i+1) * 1200 - 1)
             script.append({"second": sec, "type": "flavor",
-                          "message": f"Una trampa saltó, pero la armadura de {adv.name} resistió el impacto perfectamente."})
+                          "message": f"{adv.name} bloqueó un ataque usando su armadura."})
 
-    # 4. Eventos de Ambientación
-    flavor_texts = [
-        "{} revisa el mapa de la mazmorra con una antorcha.",
-        "Se escucha un aullido a lo lejos. {} se pone en guardia.",
-        "El silencio inunda la sala mientras {} lidera la marcha."
-    ]
-    flavor_count = duration_minutes // 10
-    for _ in range(flavor_count):
+    # Ambientación
+    flavor_texts = ["{} revisa el mapa con una antorcha.", "Se escucha un aullido a lo lejos. {} prepara su arma.",
+                    "El silencio inunda la sala mientras {} avanza cautelosamente."]
+    for _ in range(duration_minutes // 10):
         sec = random.randint(10, total_seconds - 10)
         adv = random.choice(adventurers)
         msg = random.choice(flavor_texts).format(adv.name)
         script.append(
-            {"second": sec, "type": "flavor", "message": f"{msg}"})
+            {"second": sec, "type": "flavor", "message": f"🏕️ {msg}"})
 
     script.sort(key=lambda x: x["second"])
     random.seed()
@@ -151,53 +190,100 @@ def distribute_tithe(guild, adventurers_qs, loot_dict, event_log):
 
 
 def _seed_items_if_empty():
-    """Si la armería está vacía, forjamos los primeros objetos base del juego."""
+    """Forjamos los primeros objetos con el nuevo sistema granular de 8 slots."""
     if not Item.objects.exists():
-        Item.objects.create(name="Espada Corta Oxidada", item_type='WPN',
-                            rarity='COM', cost_in_copper=10, stat_modifier=0.05)
-        Item.objects.create(name="Báculo de Roble", item_type='WPN',
-                            rarity='COM', cost_in_copper=10, stat_modifier=0.05)
-        Item.objects.create(name="Túnica de Aprendiz", item_type='AMR',
-                            rarity='COM', cost_in_copper=10, stat_modifier=0.05)
-        Item.objects.create(name="Cota de Malla", item_type='AMR',
-                            rarity='UNC', cost_in_copper=50, stat_modifier=0.10)
-        Item.objects.create(name="Amuleto del Búho", item_type='ACC',
-                            rarity='RAR', cost_in_copper=100, stat_modifier=0.15)
-        Item.objects.create(name="Excalibur", item_type='WPN',
-                            rarity='LEG', cost_in_copper=1000, stat_modifier=0.30)
+        # Armas y Escudos
+        Item.objects.create(name="Daga de Hierro", item_type='W1H',
+                            rarity='COM', cost_in_copper=10, bonus_damage=2, bonus_dex=1)
+        Item.objects.create(name="Mandoble Pesado", item_type='W2H',
+                            rarity='UNC', cost_in_copper=50, bonus_damage=5, bonus_str=2)
+        Item.objects.create(name="Escudo de Roble", item_type='OFF',
+                            rarity='COM', cost_in_copper=15, bonus_armor=2, bonus_con=1)
+        # Armadura
+        Item.objects.create(name="Casco de Cuero", item_type='HED',
+                            rarity='COM', cost_in_copper=10, bonus_armor=1)
+        Item.objects.create(name="Cota de Malla", item_type='TRS',
+                            rarity='UNC', cost_in_copper=50, bonus_armor=3)
+        Item.objects.create(name="Botas Ligeras", item_type='FET',
+                            rarity='COM', cost_in_copper=10, bonus_dex=1)
+        # Accesorios y Consumibles
+        Item.objects.create(name="Amuleto de Erudito", item_type='ACC',
+                            rarity='RAR', cost_in_copper=100, bonus_int=3, bonus_wis=2)
+        Item.objects.create(name="Poción de Salud Menor", item_type='CNS',
+                            rarity='COM', cost_in_copper=5, description="Cura 10 HP")
+
+
+def get_item_score(item):
+    """Calcula el 'Poder Total' de un objeto sumando todas sus estadísticas."""
+    if not item:
+        return -1
+    return (item.bonus_damage * 2) + (item.bonus_armor * 2) + \
+        item.bonus_str + item.bonus_dex + item.bonus_con + \
+        item.bonus_int + item.bonus_wis + item.bonus_cha + item.bonus_luk
 
 
 def _auto_equip(adv, item, event_log, pull_type):
-    """Lógica de auto-equipamiento: Solo se equipa si es una mejora real (stat mayor)."""
+    """Evalúa si el nuevo objeto es mejor que el equipado, maneja pociones y armas a 2 manos."""
+    # Lógica de Consumibles de Curación
+    if item.item_type == 'CNS':
+        if adv.current_hp < adv.max_hp:
+            # La poción cura 10
+            adv.current_hp = min(adv.max_hp, adv.current_hp + 10)
+            event_log.append(
+                f"Gacha ({pull_type}): {adv.name} compró [{item.name}] y se curó a {adv.current_hp}/{adv.max_hp} HP.")
+        else:
+            event_log.append(
+                f"Gacha ({pull_type}): {adv.name} tiró su dinero en una poción que no necesitaba.")
+        return
+
+    # Lógica de Equipamiento
+    score_new = get_item_score(item)
     replaced = False
     old_item_name = None
 
-    if item.item_type == 'WPN':
-        if not adv.equipped_weapon or adv.equipped_weapon.stat_modifier < item.stat_modifier:
-            old_item_name = adv.equipped_weapon.name if adv.equipped_weapon else None
-            adv.equipped_weapon = item
-            replaced = True
-    elif item.item_type == 'AMR':
-        if not adv.equipped_armor or adv.equipped_armor.stat_modifier < item.stat_modifier:
-            old_item_name = adv.equipped_armor.name if adv.equipped_armor else None
-            adv.equipped_armor = item
-            replaced = True
-    elif item.item_type == 'ACC':
-        if not adv.equipped_accessory or adv.equipped_accessory.stat_modifier < item.stat_modifier:
-            old_item_name = adv.equipped_accessory.name if adv.equipped_accessory else None
-            adv.equipped_accessory = item
-            replaced = True
+    # Mapeo de tipos de objeto a los campos del modelo Adventurer
+    slot_map = {
+        'W1H': 'equip_main_hand', 'W2H': 'equip_main_hand', 'OFF': 'equip_off_hand',
+        'HED': 'equip_head', 'TRS': 'equip_torso', 'LEG': 'equip_legs',
+        'HND': 'equip_hands', 'FET': 'equip_feet', 'ACC': 'equip_accessory'
+    }
+
+    slot_name = slot_map.get(item.item_type)
+    if not slot_name:
+        return
+
+    current_item = getattr(adv, slot_name)
+    score_current = get_item_score(current_item)
+
+    if score_new > score_current:
+        old_item_name = current_item.name if current_item else None
+        setattr(adv, slot_name, item)
+        replaced = True
+
+        # Lógica de exclusión de Armas a Dos Manos y Escudos
+    if item.item_type == 'OFF':
+        # Si intenta equipar escudo pero tiene un arma de dos manos, no se realiza la compra/equipamiento
+        if getattr(adv, 'equip_main_hand', None) and getattr(adv, 'equip_main_hand').item_type == 'W2H':
+            event_log.append(
+                f"Gacha ({pull_type}): {adv.name} intentó usar [{item.name}] pero usa un Mandoble. Lo vendió.")
+            return
+
+    if score_new > score_current:
+        old_item_name = current_item.name if current_item else None
+        setattr(adv, slot_name, item)
+        replaced = True
+
+        # Si se pone un arma a dos manos, el escudo cae al suelo
+        if item.item_type == 'W2H':
+            adv.equip_off_hand = None
 
     if replaced:
-        if old_item_name:
-            event_log.append(
-                f"Gacha ({pull_type}): {adv.name} obtuvo [{item.name}] y descartó su viejo {old_item_name}.")
-        else:
-            event_log.append(
-                f"Gacha ({pull_type}): {adv.name} obtuvo y equipó [{item.name}].")
+        msg = f"y descartó su viejo {old_item_name}" if old_item_name else "por primera vez"
+        event_log.append(
+            f"Gacha ({pull_type}): {adv.name} equipó [{item.name}] {msg}.")
     else:
         event_log.append(
-            f"Gacha ({pull_type}): {adv.name} sacó [{item.name}] pero ya tenía algo mejor. Lo vendió por chatarra.")
+            f"Gacha ({pull_type}): {adv.name} sacó [{item.name}] pero es chatarra en comparación a su equipo.")
 
 
 def process_session_completion(session_id, survived_seconds=None):
@@ -228,52 +314,62 @@ def process_session_completion(session_id, survived_seconds=None):
     }
 
     # Procesar eventos ocurridos dentro del tiempo sobrevivido
-    injured_ids = set()
+    damage_taken = {}
     for event in script:
         if event["second"] <= survived_seconds:
             if event["type"] == "loot":
                 loot[event["coin"]] += event["amount"]
-            elif event["type"] == "injury":
-                injured_ids.add(event["adventurer_id"])
+            elif event["type"] == "damage":
+                adv_id = event["adventurer_id"]
+                damage_taken[adv_id] = damage_taken.get(
+                    adv_id, 0) + event["amount"]
 
-    # Aplicar heridas
+    # Aplicar daño real a los Puntos de Vida
     for adv in adventurers:
-        if adv.id in injured_ids:
-            adv.is_recovering = True
-            adv.recovery_time_left = 120  # 2 horas de cooldown
+        dmg = damage_taken.get(adv.id, 0)
+        if dmg > 0:
+            adv.current_hp -= dmg
+            if adv.current_hp <= 0:
+                adv.current_hp = 0
+                adv.is_recovering = True
+                adv.recovery_time_left = 120  # 2 horas de cooldown
+                event_log.append(
+                    f"{adv.name} cayó a 0 HP y fue llevado a la enfermería en camilla.")
+            else:
+                event_log.append(
+                    f"{adv.name} sobrevivió a las heridas con {adv.current_hp}/{adv.max_hp} HP.")
             adv.save()
-            event_log.append(
-                f"{adv.name} fue enviado a la enfermería en camilla.")
 
-    # El Diezmo
     distribute_tithe(guild, adventurers, loot, event_log)
-
-    # Fase de Mercado Autónomo
     market_phase(adventurers, event_log)
 
-    # Experiencia (XP) - basada en minutos sobrevividos reales
+    # --- EXPERIENCIA Y SINERGIA ---
     survived_minutes = survived_seconds // 60
-    if survived_minutes < 1:
-        survived_minutes = 1
-
     base_xp = survived_minutes * XP_PER_MINUTE
     guild.experience += base_xp
     event_log.append(
         f"El Gremio gana {base_xp} XP base por sobrevivir {survived_minutes} min.")
 
-    for adv in adventurers:
-        # Multiplicador de experiencia personal
-        acc_bonus = adv.equipped_accessory.stat_modifier if adv.equipped_accessory else 0.0
-        adv_xp = int(base_xp * (1.0 + acc_bonus))
+    cat_lower = session.category.lower()
 
+    for adv in adventurers:
+        multiplier = 1.0
+
+        # Evaluar Sinergia de Categoría
+        for key, classes in CATEGORY_SYNERGY.items():
+            if key in cat_lower and adv.adv_class in classes:
+                multiplier += 0.5  # +50% XP
+                event_log.append(
+                    f"✨ Sinergia de Clase: {adv.name} domina esta tarea (+50% XP).")
+                break
+
+        # Bonus de Sabiduría para aprender más rápido
+        wis_bonus = sum(item.bonus_wis for item in adv.get_equipped_items())
+        multiplier += (wis_bonus * 0.05)
+
+        adv_xp = int(base_xp * multiplier)
         adv.experience += adv_xp
         adv.save()
-
-        if acc_bonus > 0:
-            event_log.append(
-                f"{adv.name} ganó {adv_xp} XP (Bonus de Accesorio).")
-
-        # Verifica si sube de nivel tras ganar XP ---
         check_level_up(adv, event_log)
 
     guild.save()

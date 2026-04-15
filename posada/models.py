@@ -174,6 +174,52 @@ class Adventurer(WealthMixin):
             self.equip_main_hand, self.equip_off_hand
         ] if i is not None]
 
+    def get_stat_modifiers(self):
+        """Calcula los bonos genéticos (Raza/Clase) y del equipamiento."""
+        mods = {'str': 0, 'dex': 0, 'con': 0, 'int': 0, 'wis': 0,
+                'cha': 0, 'luk': 0, 'armor': 0, 'damage': 0}
+
+        # Modificadores de Raza
+        race_mods = {
+            'HUM': {'str': 1, 'dex': 1, 'con': 1, 'int': 1, 'wis': 1, 'cha': 1, 'luk': 1},
+            'DWF': {'con': 2, 'str': 2},
+            'ELF': {'dex': 2, 'int': 1, 'wis': 1},
+            'HLF': {'dex': 2, 'cha': 1, 'luk': 1},
+            'GNM': {'int': 2, 'con': 1},
+            'HEF': {'cha': 2, 'dex': 1, 'int': 1},
+            'HOC': {'str': 2, 'con': 1},
+            'DGB': {'str': 2, 'cha': 1},
+            'TIE': {'cha': 2, 'int': 1},
+        }
+
+        # Modificadores de Clase
+        class_mods = {
+            'ART': {'int': 2}, 'BBN': {'str': 2, 'con': 1}, 'BRD': {'cha': 2},
+            'CLR': {'wis': 2}, 'DRD': {'wis': 2, 'int': 1}, 'FTR': {'str': 2, 'dex': 1},
+            'MNK': {'dex': 2, 'wis': 1}, 'PAL': {'str': 2, 'cha': 1}, 'RGR': {'dex': 2, 'wis': 1},
+            'ROG': {'dex': 2, 'luk': 1}, 'SOR': {'cha': 2, 'luk': 1}, 'WLK': {'cha': 2},
+            'WIZ': {'int': 2, 'wis': 1}
+        }
+
+        for stat, val in race_mods.get(self.race, {}).items():
+            mods[stat] += val
+        for stat, val in class_mods.get(self.adv_class, {}).items():
+            mods[stat] += val
+
+        # Modificadores de Equipamiento Físico
+        for item in self.get_equipped_items():
+            mods['str'] += item.bonus_str
+            mods['dex'] += item.bonus_dex
+            mods['con'] += item.bonus_con
+            mods['int'] += item.bonus_int
+            mods['wis'] += item.bonus_wis
+            mods['cha'] += item.bonus_cha
+            mods['luk'] += item.bonus_luk
+            mods['armor'] += item.bonus_armor
+            mods['damage'] += item.bonus_damage
+
+        return mods
+
 
 class GuildProfile(WealthMixin):
     level = models.PositiveIntegerField(default=1)
