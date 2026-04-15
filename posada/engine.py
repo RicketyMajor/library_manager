@@ -1,6 +1,8 @@
 import random
+from datetime import timedelta
+from django.utils import timezone
 from django.db.models import Sum
-from .models import GuildProfile, Adventurer, DeepWorkSession, Item
+from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic
 
 XP_PER_MINUTE = 10
 # Bono si la clase del aventurero hace sinergia con la tarea
@@ -96,8 +98,6 @@ def generate_session_script(session_id, duration_minutes, adventurers_qs):
         elif random.random() < (0.02 + (luk_bonus * 0.01)):
             script.append({"second": sec+2, "type": "loot", "coin": "real", "amount": 1,
                           "message": f"¡INCREÍBLE! {adv.name} ha encontrado un REAL en perfecto estado."})
-
-    # (A partir de aquí, deja el código del Pity System del Marco de Oro tal como estaba)
 
     # Pity System del Marco de Oro
     total_history = DeepWorkSession.objects.filter(completed=True).aggregate(
@@ -286,6 +286,44 @@ def _auto_equip(adv, item, event_log, pull_type):
             f"Gacha ({pull_type}): {adv.name} sacó [{item.name}] pero es chatarra en comparación a su equipo.")
 
 
+def evaluate_daily_penalties():
+    """
+    Evaluación Perezosa: Revisa si hay hábitos sin marcar de días anteriores.
+    Aplica fatiga por cada día fallido y devuelve un log de lo sucedido.
+    """
+    today = timezone.now().date()
+    habits = DailyHabit.objects.all()
+    adventurers = Adventurer.objects.all()
+
+    total_fatigue_added = 0
+    penalty_log = []
+
+    for habit in habits:
+        # Si nunca se ha completado, usa la fecha de creación como referencia
+        ref_date = habit.last_completed_date if habit.last_completed_date else habit.created_at
+        delta = (today - ref_date).days
+
+        # Si pasaron más de 1 día (es decir, mínimo ayer no se hizo)
+        if delta > 1:
+            missed_days = delta - 1
+            total_fatigue_added += missed_days
+
+            # Avanza la fecha a "ayer" para cobrar la deuda pero no castigar el día de hoy aún
+            habit.last_completed_date = today - timedelta(days=1)
+            habit.save()
+            penalty_log.append(
+                f"Hábito roto: '{habit.name}' omitido por {missed_days} día(s).")
+
+    if total_fatigue_added > 0:
+        for adv in adventurers:
+            adv.fatigue_stacks += total_fatigue_added
+            adv.save()
+        penalty_log.append(
+            f"El Gremio se debilita. Todos reciben {total_fatigue_added} pila(s) de Fatiga (-{total_fatigue_added} a todos los stats).")
+
+    return penalty_log
+
+
 def process_session_completion(session_id, survived_seconds=None):
     try:
         session = DeepWorkSession.objects.get(id=session_id)
@@ -371,6 +409,12 @@ def process_session_completion(session_id, survived_seconds=None):
         adv.experience += adv_xp
         adv.save()
         check_level_up(adv, event_log)
+
+    # --- REGISTRO HISTÓRICO PARA LOS GRÁFICOS ---
+    today = timezone.now().date()
+    daily_stat, _ = DailyStatistic.objects.get_or_create(date=today)
+    daily_stat.deep_work_minutes += survived_minutes
+    daily_stat.save()
 
     guild.save()
     session.event_log = event_log

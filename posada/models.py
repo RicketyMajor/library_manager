@@ -162,6 +162,8 @@ class Adventurer(WealthMixin):
     is_active = models.BooleanField(default=False)
     is_recovering = models.BooleanField(default=False)
     recovery_time_left = models.PositiveIntegerField(default=0)
+    fatigue_stacks = models.PositiveIntegerField(
+        default=0, help_text="Cada stack resta -1 a todos los stats.")
 
     def __str__(self):
         return f"{self.name} - {self.get_adv_class_display()} (Nv. {self.level})"
@@ -218,6 +220,10 @@ class Adventurer(WealthMixin):
             mods['armor'] += item.bonus_armor
             mods['damage'] += item.bonus_damage
 
+        if self.fatigue_stacks > 0:
+            for stat in ['str', 'dex', 'con', 'int', 'wis', 'cha', 'luk']:
+                mods[stat] -= self.fatigue_stacks
+
         return mods
 
 
@@ -264,3 +270,35 @@ class DeepWorkSession(models.Model):
     def __str__(self):
         status = "Completada" if self.completed else "Incompleta/En progreso"
         return f"[{self.category}] {self.duration_minutes} min - {status}"
+
+
+class HabitDifficulty(models.TextChoices):
+    S = 'S', 'Rango S (Épico - Mucha XP)'
+    A = 'A', 'Rango A (Difícil)'
+    B = 'B', 'Rango B (Medio)'
+    C = 'C', 'Rango C (Fácil - Poca XP)'
+
+
+class DailyHabit(models.Model):
+    """Hábitos de la vida real que el usuario debe marcar diariamente."""
+    name = models.CharField(max_length=100)
+    difficulty = models.CharField(
+        max_length=1, choices=HabitDifficulty.choices, default=HabitDifficulty.C)
+
+    # Compara esto con la fecha de hoy.
+    last_completed_date = models.DateField(null=True, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return f"[{self.difficulty}] {self.name}"
+
+
+class DailyStatistic(models.Model):
+    """Guarda data agregada por día para alimentar los gráficos de Textual-Plotext."""
+    date = models.DateField(unique=True, default=timezone.now)
+    deep_work_minutes = models.PositiveIntegerField(default=0)
+
+    screen_time_minutes = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"Stats {self.date}: {self.deep_work_minutes} min DW"

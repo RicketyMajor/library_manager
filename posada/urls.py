@@ -12,4 +12,8 @@ urlpatterns = [
     path('api/adventurer/delete/<int:adv_id>/',
          views.delete_adventurer, name='delete_adventurer'),
     path('api/tavern/', views.tavern_recruits, name='tavern_recruits'),
+    path('api/habits/', views.list_habits, name='list_habits'),
+    path('api/habits/create/', views.create_habit, name='create_habit'),
+    path('api/habits/complete/', views.complete_habit, name='complete_habit'),
+    path('api/stats/graph/', views.get_stats_data, name='get_stats_data'),
 ]

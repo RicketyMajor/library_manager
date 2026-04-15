@@ -5,6 +5,7 @@ from textual.containers import Vertical, Horizontal, Grid, VerticalScroll
 from textual.reactive import reactive
 from textual import work
 import httpx
+from textual_plotext import PlotextPlot
 
 API_POSADA_BASE = "http://127.0.0.1:8000/posada/api/"
 
@@ -280,6 +281,41 @@ class AdventurerDetailsModal(ModalScreen[None]):
         if event.button.id == "btn_close_details":
             self.dismiss(None)
 
+# --- MODAL DE NUEVO HÁBITO ---
+
+
+class NewHabitModal(ModalScreen[dict]):
+    """Ventana para añadir un nuevo hábito al tablón."""
+
+    CSS = """
+    #habit_dialog { width: 50; height: auto; padding: 1 2; border: solid $success; background: $surface; }
+    .modal_title { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; width: 100%; }
+    #btn_save_habit { width: 100%; margin-top: 1; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="habit_dialog"):
+            yield Label("Nuevo Hábito Diario", classes="modal_title")
+            yield Input(placeholder="Ej: Ir al gimnasio, Leer 20 págs...", id="habit_name")
+            yield Label("Dificultad y Recompensa:")
+            yield Select((
+                ("Rango S (Mucha XP y Oro)", "S"),
+                ("Rango A (Difícil)", "A"),
+                ("Rango B (Medio)", "B"),
+                ("Rango C (Fácil - Poco XP)", "C")
+            ), id="habit_diff", value="C")
+            yield Button("Añadir al Tablón", variant="success", id="btn_save_habit")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_save_habit":
+            name = self.query_one("#habit_name", Input).value
+            diff = self.query_one("#habit_diff", Select).value
+            if name:
+                self.dismiss({"name": name, "difficulty": diff})
+            else:
+                self.app.notify(
+                    "El hábito necesita un nombre.", severity="error")
+
 # --- PANTALLA PRINCIPAL ---
 
 
@@ -298,6 +334,8 @@ class PosadaMainScreen(Screen):
         ("x", "delete_adventurer", "Eliminar (Gremio)"),
         ("r", "recruit", "Reclutar (Taberna)"),
         ("f", "refresh_tavern", "Invitar Rondas [Refrescar] (Taberna)"),
+        ("m", "complete_habit", "Marcar Hecho (Misiones)"),
+        ("+", "add_habit", "Añadir Hábito (Misiones)"),
         ("escape", "app.pop_screen", "Volver al Launcher"),
         ("q", "app.quit", "Salir de Bunker"),
     ]
@@ -319,6 +357,7 @@ class PosadaMainScreen(Screen):
     
     .guild_stats { height: auto; border: solid $primary; padding: 1; margin-bottom: 1; }
     .btn_consolidate { margin-top: 1; width: 100%; }
+    .half_width { width: 50%; height: 100%; padding: 0 1; }
     """
 
     def compose(self) -> ComposeResult:
@@ -350,11 +389,11 @@ class PosadaMainScreen(Screen):
                             yield Label("📜 Registro de Eventos")
                             yield Log(id="event_log", highlight=True)
 
-                with TabPane("El Gremio (Bóveda)", id="tab_guild"):
+                with TabPane("El Gremio", id="tab_guild"):
                     with Vertical(classes="guild_stats"):
                         yield Label("Cargando...", id="lbl_guild_level")
                         yield Label("Cargando bóveda...", id="lbl_guild_vault")
-                        yield Button("Consolidar Riqueza (Mesa del Cambista)", id="btn_consolidate", classes="btn_consolidate", variant="warning")
+                        yield Button("Consolidar Riqueza", id="btn_consolidate", classes="btn_consolidate", variant="warning")
                     yield Label("Todos los Aventureros Reclutados:")
                     yield DataTable(id="all_adventurers_table")
 
@@ -366,8 +405,17 @@ class PosadaMainScreen(Screen):
                         yield Button("Invitar Rondas (f)", id="btn_refresh_tavern", variant="primary")
 
                 with TabPane("Tablón de Misiones", id="tab_missions"):
-                    yield Label("Marca tus hábitos diarios para obtener recompensas rápidas.")
-                    yield DataTable(id="missions_table")
+                    with Horizontal():
+                        # Los Hábitos
+                        with Vertical(id="habits_col", classes="half_width"):
+                            yield Label("Tareas Diarias (+ Añadir | m Marcar)")
+                            yield DataTable(id="missions_table")
+
+                        # Gráfico Analítico
+                        with Vertical(id="stats_col", classes="half_width"):
+                            yield Label("Productividad Histórica (Deep Work)", classes="section_title")
+                            # Aquí inyectamos el lienzo del gráfico
+                            yield PlotextPlot(id="productivity_plot")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -389,7 +437,7 @@ class PosadaMainScreen(Screen):
 
         # Sincroniza la interfaz con la base de datos
         self.sync_guild_status()
-
+        self.fetch_missions_data()
         self.set_timer_ui_state("idle")
 
     # --- LLAMADAS A LA API ---
@@ -835,5 +883,99 @@ class PosadaMainScreen(Screen):
             self.app.notify(
                 "Selecciona a un aventurero de la Taberna primero.", severity="warning")
 
-    # Mapea los botones físicos también en on_button_pressed
-    # (Añade estos dos elif al final de tu on_button_pressed)
+    # --- TABLÓN DE MISIONES Y GRÁFICOS ---
+    @work(thread=True)
+    def fetch_missions_data(self):
+        """Obtiene la lista de hábitos y la data del gráfico."""
+        try:
+            # 1. Obtener Hábitos
+            r_habits = httpx.get(f"{API_POSADA_BASE}habits/", timeout=5.0)
+            if r_habits.status_code == 200:
+                data = r_habits.json()
+                self.app.call_from_thread(
+                    self.render_habits, data.get("habits", []))
+                # Mostrar notificaciones si hubo penalizaciones
+                for penalty in data.get("penalties_applied", []):
+                    self.app.call_from_thread(
+                        self.app.notify, penalty, severity="warning")
+
+            # Obtener Gráficos
+            r_stats = httpx.get(f"{API_POSADA_BASE}stats/graph/", timeout=5.0)
+            if r_stats.status_code == 200:
+                self.app.call_from_thread(self.render_plot, r_stats.json())
+        except Exception:
+            pass
+
+    def render_habits(self, habits):
+        self.habits_cache = habits
+        table = self.query_one("#missions_table", DataTable)
+        table.clear()
+        for h in habits:
+            status = "Completado" if h["completed_today"] else "Pendiente"
+            table.add_row(h["name"], h["difficulty"], status, key=str(h["id"]))
+
+    def render_plot(self, stats_data):
+        """Dibuja el gráfico de barras en la terminal usando Plotext."""
+        plot_widget = self.query_one("#productivity_plot", PlotextPlot)
+        plt = plot_widget.plt
+        plt.clear_figure()
+
+        dates = stats_data.get("dates", [])
+        dw_minutes = stats_data.get("deep_work", [])
+
+        if not dates:
+            plt.title("No hay datos suficientes aún.")
+        else:
+            plt.theme("dark")
+            plt.bar(dates, dw_minutes, marker="braille", color="cyan")
+            plt.title("Minutos de Deep Work por Día")
+            plt.xlabel("Fecha")
+            plt.ylabel("Minutos")
+
+        plot_widget.refresh()
+
+    def action_add_habit(self) -> None:
+        if self.query_one(TabbedContent).active == "tab_missions":
+            self.app.push_screen(NewHabitModal(), self.submit_new_habit)
+
+    @work(thread=True)
+    def submit_new_habit(self, result: dict | None) -> None:
+        if result is None:
+            return
+        try:
+            resp = httpx.post(
+                f"{API_POSADA_BASE}habits/create/", json=result, timeout=5.0)
+            if resp.status_code == 200:
+                self.app.call_from_thread(self.fetch_missions_data)
+        except Exception:
+            self.app.call_from_thread(
+                self.app.notify, "Fallo al crear hábito.", severity="error")
+
+    def action_complete_habit(self) -> None:
+        if self.query_one(TabbedContent).active != "tab_missions":
+            return
+        table = self.query_one("#missions_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key
+            self.request_habit_completion(row_key.value)
+        except Exception:
+            self.app.notify("Selecciona un hábito primero.",
+                            severity="warning")
+
+    @work(thread=True)
+    def request_habit_completion(self, habit_id: str) -> None:
+        try:
+            resp = httpx.post(f"{API_POSADA_BASE}habits/complete/",
+                              json={"habit_id": habit_id}, timeout=5.0)
+            if resp.status_code == 200:
+                self.app.call_from_thread(
+                    self.app.notify, resp.json().get("message"), severity="success")
+                self.app.call_from_thread(self.fetch_missions_data)
+                # Refrescar fatiga y XP en el gremio
+                self.app.call_from_thread(self.sync_guild_status)
+            else:
+                self.app.call_from_thread(
+                    self.app.notify, resp.json().get("message"), severity="warning")
+        except Exception:
+            pass

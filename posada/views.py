@@ -1,9 +1,11 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender
+from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, Item
 import random
-from .engine import process_session_completion, generate_session_script, consolidate_wealth, distribute_random_stats
+from .engine import process_session_completion, generate_session_script, consolidate_wealth, distribute_random_stats, evaluate_daily_penalties
+from django.utils import timezone
+from datetime import timedelta
 
 
 @api_view(['GET'])
@@ -62,7 +64,9 @@ def guild_status(request):
             "equip_hands": adv.equip_hands.name if adv.equip_hands else "Vacío",
             "equip_legs": adv.equip_legs.name if adv.equip_legs else "Vacío",
             "equip_feet": adv.equip_feet.name if adv.equip_feet else "Vacío",
-            "equip_accessory": adv.equip_accessory.name if adv.equip_accessory else "Ninguno"
+            "equip_accessory": adv.equip_accessory.name if adv.equip_accessory else "Ninguno",
+
+            "fatigue": adv.fatigue_stacks
         })
 
     guild_data = {
@@ -237,3 +241,99 @@ def delete_adventurer(request, adv_id):
         return Response({"status": "success", "message": f"{name} ha sido eliminado del Gremio."})
     except Adventurer.DoesNotExist:
         return Response({"status": "error", "message": "Aventurero no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+def list_habits(request):
+    """Lista todos los hábitos y evalúa penalizaciones de días anteriores."""
+    # Al consultar el tablón, el motor revisa si hay deudas de días pasados
+    penalties = evaluate_daily_penalties()
+
+    today = timezone.now().date()
+    habits = DailyHabit.objects.all()
+
+    habit_list = []
+    for h in habits:
+        habit_list.append({
+            "id": h.id,
+            "name": h.name,
+            "difficulty": h.get_difficulty_display(),
+            "completed_today": h.last_completed_date == today
+        })
+
+    return Response({
+        "habits": habit_list,
+        "penalties_applied": penalties
+    })
+
+
+@api_view(['POST'])
+def create_habit(request):
+    """Crea un nuevo hábito desde la TUI."""
+    data = request.data
+    habit = DailyHabit.objects.create(
+        name=data.get('name'),
+        difficulty=data.get('difficulty', 'C')
+    )
+    return Response({"status": "success", "message": f"Hábito '{habit.name}' añadido al tablón."})
+
+
+@api_view(['POST'])
+def complete_habit(request):
+    """Marca un hábito como hecho, otorga recompensas y cura fatiga."""
+    today = timezone.now().date()
+    habit_id = request.data.get('habit_id')
+
+    try:
+        habit = DailyHabit.objects.get(id=habit_id)
+        if habit.last_completed_date == today:
+            return Response({"status": "warning", "message": "Ya cumpliste este hábito hoy."})
+
+        guild, _ = GuildProfile.objects.get_or_create(id=1)
+        adventurers = Adventurer.objects.all()
+
+        # --- DEFINICIÓN DE RECOMPENSAS POR RANGO ---
+        rewards = {
+            'S': {'xp': 100, 'coin': 'iota', 'amt': 1},
+            'A': {'xp': 50,  'coin': 'copper_penny', 'amt': 5},
+            'B': {'xp': 25,  'coin': 'copper_penny', 'amt': 2},
+            'C': {'xp': 10,  'coin': 'ardite', 'amt': 5},
+        }
+        r = rewards.get(habit.difficulty)
+
+        # Otorga XP al Gremio y a todos los aventureros
+        guild.experience += r['xp']
+        setattr(guild, r['coin'], getattr(guild, r['coin']) + r['amt'])
+        guild.save()
+
+        for adv in adventurers:
+            adv.experience += r['xp']
+            # CADA HÁBITO CURA 1 PILA DE FATIGA
+            if adv.fatigue_stacks > 0:
+                adv.fatigue_stacks -= 1
+            adv.save()
+
+        habit.last_completed_date = today
+        habit.save()
+
+        return Response({
+            "status": "success",
+            "message": f"¡Hábito '{habit.name}' completado! +{r['xp']} XP y {r['amt']} {r['coin']}. Fatiga reducida."
+        })
+    except DailyHabit.DoesNotExist:
+        return Response({"status": "error", "message": "Hábito no encontrado."}, status=404)
+
+
+@api_view(['GET'])
+def get_stats_data(request):
+    """Extrae los últimos 30 días de actividad para el gráfico."""
+    thirty_days_ago = timezone.now().date() - timedelta(days=30)
+    stats = DailyStatistic.objects.filter(
+        date__gte=thirty_days_ago).order_order_by('date')
+
+    data = {
+        "dates": [s.date.strftime("%d/%m") for s in stats],
+        "deep_work": [s.deep_work_minutes for s in stats],
+        "screen_time": [s.screen_time_minutes for s in stats]
+    }
+    return Response(data)
