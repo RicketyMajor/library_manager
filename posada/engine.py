@@ -2,7 +2,7 @@ import random
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum
-from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic
+from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic, InventorySlot
 
 XP_PER_MINUTE = 10
 # Bono si la clase del aventurero hace sinergia con la tarea
@@ -223,7 +223,17 @@ def get_item_score(item):
 
 
 def _auto_equip(adv, item, event_log, pull_type):
-    """Evalúa si el nuevo objeto es mejor que el equipado, maneja pociones y armas a 2 manos."""
+    """Evalúa si el objeto es mejor, pero primero verifica si puede usarlo."""
+
+    # --- VERIFICAR COMPETENCIA ---
+    if not is_class_allowed(adv, item):
+        # El aventurero puede encontrarlo en la aventura, pero no equiparlo.
+        # Se envía directamente a su mochila (InventorySlot).
+        InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+        event_log.append(
+            f"{adv.name} encontró [{item.name}], pero su clase no le permite usarlo. Lo guardó en su mochila.")
+        return
+
     # Lógica de Consumibles de Curación
     if item.item_type == 'CNS':
         if adv.current_hp < adv.max_hp:
@@ -542,6 +552,15 @@ def pay_with_change(adv, cost_in_copper):
     return True
 
 
+def is_class_allowed(adv, item):
+    """Verifica si la clase del aventurero puede usar el objeto."""
+    # Si no hay restricciones, todos pueden usarlo.
+    if not item.allowed_classes:
+        return True
+    # Si hay restricciones, verifica si la clase del aventurero está en la lista.
+    return adv.adv_class in item.allowed_classes
+
+
 def market_phase(adventurers_qs, event_log):
     """Simula las compras automáticas de los aventureros."""
     _seed_items_if_empty()
@@ -553,20 +572,32 @@ def market_phase(adventurers_qs, event_log):
         if adv.is_recovering:
             continue
 
+        # 1. Filtramos los items que ESTE aventurero específico SÍ puede usar
+        items_validos = [i for i in all_items if is_class_allowed(adv, i)]
+
+        # Si no hay items válidos en la base de datos para él, no compra nada
+        if not items_validos:
+            continue
+
+        # 2. Compra Premium (Usando SOLO los items_validos)
         if adv.silver_penny >= 1:
             adv.silver_penny -= 1
-            pool = [i for i in all_items if i.rarity in ['RAR', 'EPC', 'LEG']]
+            pool = [i for i in items_validos if i.rarity in ['RAR', 'EPC', 'LEG']]
             if not pool:
-                pool = all_items
+                pool = items_validos
             item = random.choice(pool)
             _auto_equip(adv, item, event_log, "Premium")
 
+        # 3. Compra Común (Actualizado a cost_copper_penny por el nuevo CostMixin)
         elif adv.copper_penny >= 10:
-            item = random.choice(
-                [i for i in all_items if i.cost_in_copper <= 10])
-            # Compran solo si pueden pagar y recibir vuelto exacto
-            if pay_with_change(adv, item.cost_in_copper):
-                _auto_equip(adv, item, event_log, "Común")
+            comunes_comprables = [
+                i for i in items_validos if i.cost_copper_penny <= 10]
+
+            if comunes_comprables:
+                item = random.choice(comunes_comprables)
+                # Compran solo si pueden pagar y recibir vuelto exacto
+                if pay_with_change(adv, item.cost_copper_penny):
+                    _auto_equip(adv, item, event_log, "Común")
 
 
 def consolidate_wealth(guild_id):

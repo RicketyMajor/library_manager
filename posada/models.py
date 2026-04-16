@@ -40,7 +40,6 @@ class AdventurerGender(models.TextChoices):
 
 
 class ItemType(models.TextChoices):
-    # Tipos de equipamiento granular
     WEAPON_1H = 'W1H', 'Arma (1 Mano)'
     WEAPON_2H = 'W2H', 'Arma (2 Manos)'
     OFFHAND = 'OFF', 'Secundaria / Escudo'
@@ -49,27 +48,75 @@ class ItemType(models.TextChoices):
     LEGS = 'LGS', 'Piernas'
     HANDS = 'HND', 'Manos'
     FEET = 'FET', 'Pies'
-    ACCESSORY = 'ACC', 'Accesorio'
+    NECKLACE = 'NCK', 'Collar'
+    RING = 'RNG', 'Anillo'
+    BRACELET = 'BRC', 'Brazalete'
+    EARRING = 'EAR', 'Aretes'
     CONSUMABLE = 'CNS', 'Consumible'
+    MISC = 'MSC', 'Misceláneo'
 
 
 class ItemRarity(models.TextChoices):
-    # Niveles de rareza
     COMMON = 'COM', 'Común'
     UNCOMMON = 'UNC', 'Poco Común'
     RARE = 'RAR', 'Raro'
     EPIC = 'EPC', 'Épico'
     LEGENDARY = 'LEG', 'Legendario'
 
+    @classmethod
+    def get_color(cls, rarity):
+        """Devuelve la etiqueta de color Rich de Textual para los logs y la interfaz."""
+        colors = {
+            cls.COMMON: 'gray',
+            cls.UNCOMMON: 'bold green',
+            cls.RARE: 'bold blue',
+            cls.EPIC: 'bold magenta',
+            cls.LEGENDARY: 'bold yellow'
+        }
+        return colors.get(rarity, 'white')
 
-class Item(models.Model):
-    """Representa un objeto físico en el mundo con impacto en estadísticas."""
+
+class CostMixin(models.Model):
+    """Modelo abstracto para definir precios complejos con el sistema de 11 monedas."""
+    cost_iron_half_penny = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Medio penique de hierro")
+    cost_iron_penny = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Penique de hierro")
+    cost_ardite = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Ardite")
+    cost_drabin = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Drabín")
+    cost_copper_penny = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Penique de cobre")
+    cost_iota = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Iota")
+    cost_silver_penny = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Penique de plata")
+    cost_sueldo = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Sueldo")
+    cost_talento = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Talento")
+    cost_real = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Real")
+    cost_marco = models.PositiveIntegerField(
+        default=0, verbose_name="Coste: Marco")
+
+    class Meta:
+        abstract = True
+
+
+class Item(CostMixin):
+    """Representa un objeto en el mundo. ¡Úsalo como plantilla para tus Excel!"""
     name = models.CharField(max_length=100)
+    allowed_classes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista de códigos (WIZ, BBN, etc.) que pueden usar este item."
+    )
     description = models.TextField(blank=True)
     item_type = models.CharField(max_length=3, choices=ItemType.choices)
     rarity = models.CharField(
         max_length=3, choices=ItemRarity.choices, default=ItemRarity.COMMON)
-    cost_in_copper = models.PositiveIntegerField(default=10)
 
     # Modificadores de Combate
     bonus_damage = models.PositiveIntegerField(
@@ -88,6 +135,25 @@ class Item(models.Model):
 
     def __str__(self):
         return f"{self.name} [{self.get_rarity_display()}]"
+
+
+class InventorySlot(models.Model):
+    """Mochila Infinita: Relación entre un objeto y su dueño (Aventurero o Gremio)."""
+    item = models.ForeignKey(Item, on_delete=models.CASCADE)
+
+    # Si pertenece a un aventurero, este campo se llena. Si es del cofre, queda nulo.
+    adventurer = models.ForeignKey(
+        'Adventurer', on_delete=models.CASCADE, null=True, blank=True, related_name='inventory')
+
+    # Si pertenece al cofre del gremio, este campo se llena.
+    guild = models.ForeignKey('GuildProfile', on_delete=models.CASCADE,
+                              null=True, blank=True, related_name='vault_inventory')
+
+    quantity = models.PositiveIntegerField(default=1)
+
+    def __str__(self):
+        owner = self.adventurer.name if self.adventurer else "Cofre del Gremio"
+        return f"{self.quantity}x {self.item.name} ({owner})"
 
 
 class WealthMixin(models.Model):
@@ -148,9 +214,16 @@ class Adventurer(WealthMixin):
         Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_hands')
     equip_feet = models.ForeignKey(
         Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_feet')
-    equip_accessory = models.ForeignKey(
-        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_accessory')
-
+    equip_necklace = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_necklace')
+    equip_ring_1 = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_ring_1')
+    equip_ring_2 = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_ring_2')
+    equip_bracelet = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_bracelet')
+    equip_earring = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_earring')
     equip_main_hand = models.ForeignKey(
         Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_main')
     equip_off_hand = models.ForeignKey(
@@ -172,7 +245,9 @@ class Adventurer(WealthMixin):
         """Retorna una lista filtrada con los objetos físicos que el personaje lleva puestos."""
         return [i for i in [
             self.equip_head, self.equip_torso, self.equip_legs,
-            self.equip_hands, self.equip_feet, self.equip_accessory,
+            self.equip_hands, self.equip_feet,
+            self.equip_necklace, self.equip_ring_1, self.equip_ring_2,
+            self.equip_bracelet, self.equip_earring,
             self.equip_main_hand, self.equip_off_hand
         ] if i is not None]
 

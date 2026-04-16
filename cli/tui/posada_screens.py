@@ -3,6 +3,7 @@ from textual.screen import Screen, ModalScreen
 from textual.widgets import Header, Footer, Button, Label, TabbedContent, TabPane, DataTable, Log, Input, RadioSet, RadioButton, SelectionList, Select
 from textual.containers import Vertical, Horizontal, Grid, VerticalScroll
 from textual.reactive import reactive
+from textual.binding import Binding
 from textual import work
 import httpx
 from textual_plotext import PlotextPlot
@@ -352,12 +353,25 @@ class PosadaMainScreen(Screen):
     is_countdown = reactive(True)
 
     BINDINGS = [
-        ("escape", "app.pop_screen", "Volver al Launcher"),
-        ("q", "app.quit", "Salir de Bunker"),
-        ("1", "switch_tab('tab_timer')", "Sala de Enfoque"),
-        ("2", "switch_tab('tab_guild')", "El Gremio"),
-        ("3", "switch_tab('tab_tavern')", "La Taberna"),
+        # Globales
+        ("escape", "app.pop_screen", "Salir Posada"),
+        ("q", "app.quit", "Salir Bunker"),
+        ("1", "switch_tab('tab_timer')", "Enfoque"),
+        ("2", "switch_tab('tab_guild')", "Gremio"),
+        ("3", "switch_tab('tab_tavern')", "Taberna"),
         ("4", "switch_tab('tab_missions')", "Misiones"),
+
+        # Controles Ocultos
+        Binding("c", "setup_timer", "Configurar", show=False),
+        Binding("p", "pause_timer", "Pausar", show=False),
+        Binding("s", "stop_timer", "Detener", show=False),
+        Binding("d", "show_details", "Detalles", show=False),
+        Binding("x", "delete_adventurer", "Eliminar", show=False),
+        Binding("n", "new_adventurer", "Nuevo Avatar", show=False),
+        Binding("r", "recruit", "Reclutar", show=False),
+        Binding("f", "refresh_tavern", "Invitar", show=False),
+        Binding("m", "complete_habit", "Marcar Hecho", show=False),
+        Binding("+", "add_habit", "Añadir Hábito", show=False),
     ]
 
     CSS = """
@@ -378,6 +392,16 @@ class PosadaMainScreen(Screen):
     .guild_stats { height: auto; border: solid $primary; padding: 1; margin-bottom: 1; }
     .btn_consolidate { margin-top: 1; width: 100%; }
     .half_width { width: 50%; height: 100%; padding: 0 1; }
+    #tab_controls {
+        dock: bottom;
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: $accent;
+        background: $panel;
+        border-top: solid $primary;
+        padding: 0 1;
+    }
     """
 
     def compose(self) -> ComposeResult:
@@ -385,7 +409,7 @@ class PosadaMainScreen(Screen):
         with Vertical(id="posada_root"):
             with TabbedContent(initial="tab_timer"):
 
-                with TimerTab("Sala de Enfoque", id="tab_timer"):
+                with TabPane("Sala de Enfoque", id="tab_timer"):
                     with Horizontal(id="focus_layout"):
 
                         # Columna Izquierda
@@ -409,7 +433,7 @@ class PosadaMainScreen(Screen):
                             yield Label("📜 Registro de Eventos")
                             yield Log(id="event_log", highlight=True)
 
-                with GuildTab("El Gremio (Bóveda)", id="tab_guild"):
+                with TabPane("El Gremio (Bóveda)", id="tab_guild"):
                     with Vertical(classes="guild_stats"):
                         yield Label("Cargando...", id="lbl_guild_level")
                         yield Label("Cargando bóveda...", id="lbl_guild_vault")
@@ -417,14 +441,14 @@ class PosadaMainScreen(Screen):
                     yield Label("Todos los Aventureros Reclutados:")
                     yield DataTable(id="all_adventurers_table")
 
-                with TavernTab("La Taberna", id="tab_tavern"):
+                with TabPane("La Taberna", id="tab_tavern"):
                     yield Label("Aventureros buscando un Gremio (Nivel 1):", classes="section_title")
                     yield DataTable(id="tavern_table")
                     with Horizontal(classes="timer_buttons"):
                         yield Button("Reclutar Seleccionado (r)", id="btn_recruit", variant="success")
                         yield Button("Invitar Rondas (f)", id="btn_refresh_tavern", variant="primary")
 
-                with MissionsTab("Tablón de Misiones", id="tab_missions"):
+                with TabPane("Tablón de Misiones", id="tab_missions"):
                     with Horizontal():
                         # Los Hábitos
                         with Vertical(id="habits_col", classes="half_width"):
@@ -436,6 +460,7 @@ class PosadaMainScreen(Screen):
                             yield Label("Productividad Histórica (Deep Work)", classes="section_title")
                             # Aquí inyectamos el lienzo del gráfico
                             yield PlotextPlot(id="productivity_plot")
+        yield Label("", id="tab_controls")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -460,6 +485,8 @@ class PosadaMainScreen(Screen):
         self.fetch_missions_data()
         self.set_timer_ui_state("idle")
         self.query_one("#tab_timer").focus()
+        self.query_one("#tab_controls", Label).update(
+            "Sala de Enfoque -> [c] Configurar Expedición  |  [p] Pausar / Seguir  |  [s] Detener / Huir")
 
     # --- LLAMADAS A LA API ---
     @work(thread=True)
@@ -688,11 +715,25 @@ class PosadaMainScreen(Screen):
                 "Selecciona un aventurero de la tabla primero.", severity="warning")
 
     def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
-        """Al cambiar de pestaña (con mouse o teclado), le damos el Foco para que el Footer actualice."""
-        event.pane.focus()
+        """Cambia el texto de nuestra Barra de Acción dependiendo de la pestaña."""
+        lbl = self.query_one("#tab_controls", Label)
+        pane_id = event.pane.id
+
+        if pane_id == "tab_timer":
+            lbl.update(
+                "Sala de Enfoque -> [c] Configurar Expedición  |  [p] Pausar / Seguir  |  [s] Detener / Huir")
+        elif pane_id == "tab_guild":
+            lbl.update(
+                "El Gremio -> [d] Ver Detalles y Equipo  |  [x] Eliminar Aventurero  |  [n] Reclutar Avatar Inicial")
+        elif pane_id == "tab_tavern":
+            lbl.update(
+                "La Taberna -> [r] Reclutar Seleccionado  |  [f] Pagar Rondas de Cerveza (Refrescar)")
+        elif pane_id == "tab_missions":
+            lbl.update(
+                "Misiones -> [m] Marcar Hábito Hecho  |  [+] Añadir Nuevo Hábito al Tablón")
 
     def action_switch_tab(self, tab_id: str) -> None:
-        """Acción para cambiar de pestaña con los números (1, 2, 3, 4)."""
+        """Permite navegar súper rápido entre pestañas presionando 1, 2, 3 o 4."""
         self.query_one(TabbedContent).active = tab_id
 
     # --- FLUJO DE INICIO MUD (PRE-CÁLCULO) ---
