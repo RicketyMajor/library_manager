@@ -6,10 +6,6 @@ class Command(BaseCommand):
     help = 'Puebla la base de datos con el catálogo completo de Armas, Armaduras y Objetos.'
 
     def handle(self, *args, **kwargs):
-        # ==========================================
-        # 📜 EL GRAN CATÁLOGO DE LA POSADA
-        # Aquí puedes pegar todos los ítems de tu Excel.
-        # ==========================================
         CATALOGO = [
             # --- TEMPLATE BASE PARA COPIAR Y PEGAR ---
             # {
@@ -17,6 +13,7 @@ class Command(BaseCommand):
             #     "description": "Descripción narrativa (opcional)",
             #     "item_type": "W1H|W2H|OFF|HED|TRS|LGS|HND|FET|NCK|RNG|BRC|EAR|CNS|MSC",
             #     "rarity": "COM|UNC|RAR|EPC|LEG",
+            #     "allowed_classes": ["WIZ", "SOR", "DRD"],  # Lista de clases que pueden usarlo, dejar vacío si no hay restricciones
             #     # --- ECONOMÍA (Borra las monedas que no uses o déjalas en 0) ---
             #     "cost_iron_half_penny": 0, "cost_iron_penny": 0, "cost_ardite": 0,
             #     "cost_drabin": 0, "cost_copper_penny": 0, "cost_iota": 0,
@@ -29,19 +26,123 @@ class Command(BaseCommand):
             #     "bonus_wis": 0, "bonus_cha": 0, "bonus_luk": 0,
             # },
 
-            # ⚔️ EJEMPLO 1: Arma de Dos Manos (Poco Común)
+            # CONJUNTO DE ARMADURA DE TELA (Común)
             {
-                "name": "Mandoble del Norte",
-                "description": "Una espada pesada que requiere ambas manos. Destroza escudos.",
-                "item_type": "W2H",
-                "rarity": "UNC",
-                "allowed_classes": ["WIZ", "SOR", "DRD"],
-                "cost_silver_penny": 2,
-                "cost_copper_penny": 5,  # Cuesta 2 platas y 5 cobres
-                "bonus_damage": 8,
-                "bonus_str": 3,
-                "bonus_dex": -1,  # Las armas pesadas restan agilidad
+                "name": "Capucha de Tela",
+                "description": "Una capucha hecha de tela cómoda. Proporciona cobertura ligera para la cabeza.",
+                "item_type": "HED",
+                "rarity": "COM",
+                "allowed_classes": ["WIZ", "SOR", "DRD", "WLK"],
+                "cost_ardite": 2,
+                "cost_iron_penny": 5,
+                "bonus_armor": 1,
             },
+
+            {
+                "name": "Túnica de Tela",
+                "description": "Una túnica hecha de tela cómoda. Proporciona cobertura ligera para el cuerpo.",
+                "item_type": "TRS",
+                "rarity": "COM",
+                "allowed_classes": ["WIZ", "SOR", "DRD", "WLK"],
+                "cost_ardite": 3,
+                "cost_iron_penny": 5,
+                "bonus_armor": 1,
+            },
+
+            {
+                "name": "Pantalones de Tela",
+                "description": "Unos pantalones hechos de tela cómoda. Proporciona cobertura ligera para las piernas.",
+                "item_type": "LGS",
+                "rarity": "COM",
+                "allowed_classes": ["WIZ", "SOR", "DRD", "WLK"],
+                "cost_ardite": 3,
+                "cost_iron_penny": 5,
+                "bonus_armor": 1,
+            },
+
+            {
+                "name": "Botas de Tela",
+                "description": "Unas botas hechas de tela cómoda. Proporciona cobertura ligera para los pies.",
+                "item_type": "FET",
+                "rarity": "COM",
+                "allowed_classes": ["WIZ", "SOR", "DRD", "WLK"],
+                "cost_ardite": 2,
+                "cost_iron_penny": 5,
+                "bonus_armor": 1,
+            },
+
+            {
+                "name": "Guantes de Tela",
+                "description": "Unos guantes hechos de tela cómoda. Proporciona cobertura ligera para las manos.",
+                "item_type": "HND",
+                "rarity": "COM",
+                "allowed_classes": ["WIZ", "SOR", "DRD", "WLK"],
+                "cost_ardite": 2,
+                "cost_iron_penny": 5,
+                "bonus_armor": 1,
+            },
+
+            # CONJUNTO DE ARMADURA DE CUERO ACOLCHADO (COMÚN)
+
+            {
+                "name": "Gorro de Cuero Acolchado",
+                "description": "Un gorro hecho de cuero acolchado. Es cómodo y protegido.",
+                "item_type": "HED",
+                "rarity": "COM",
+                "allowed_classes": ["ROG", "RGR", "BRD", "MNK"],
+                "cost_ardite": 2,
+                "cost_iron_penny": 8,
+                "bonus_armor": 1,
+            },
+
+            {
+                "name": "Atuendo de Cuero Acolchado",
+                "description": "Un atuendo hecho de cuero acolchado. Es cómodo y protegido.",
+                "item_type": "TRS",
+                "rarity": "COM",
+                "allowed_classes": ["ROG", "RGR", "BRD", "MNK"],
+                "cost_ardite": 3,
+                "cost_iron_penny": 8,
+                "bonus_armor": 1,
+            },
+
+            {
+                "name": "Pantalones de Cuero Acolchado",
+                "description": "Unos pantalones hechos de cuero acolchado. Son cómodos y protegidos.",
+                "item_type": "LGS",
+                "rarity": "COM",
+                "allowed_classes": ["ROG", "RGR", "BRD", "MNK"],
+                "cost_ardite": 3,
+                "cost_iron_penny": 8,
+                "bonus_armor": 1,
+            },
+
+            {
+                "name": "Botas de Cuero Acolchado",
+                "description": "Unas botas hechas de cuero acolchado. Son cómodas y protegidas.",
+                "item_type": "FET",
+                "rarity": "COM",
+                "allowed_classes": ["ROG", "RGR", "BRD", "MNK"],
+                "cost_ardite": 2,
+                "cost_iron_penny": 8,
+                "bonus_armor": 1,
+            },
+
+            {
+                "name": "Guantes de Cuero Acolchado",
+                "description": "Unos guantes hechos de cuero acolchado. Son cómodos y protegidos.",
+                "item_type": "HND",
+                "rarity": "COM",
+                "allowed_classes": ["ROG", "RGR", "BRD", "MNK"],
+                "cost_ardite": 2,
+                "cost_iron_penny": 8,
+                "bonus_armor": 1,
+            },
+
+
+
+
+
 
             # 🛡️ EJEMPLO 2: Armadura de Torso (Épica)
             {

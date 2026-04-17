@@ -409,7 +409,7 @@ def process_session_completion(session_id, survived_seconds=None):
             if key in cat_lower and adv.adv_class in classes:
                 multiplier += 0.5  # +50% XP
                 event_log.append(
-                    f"✨ Sinergia de Clase: {adv.name} domina esta tarea (+50% XP).")
+                    f"Sinergia de Clase: {adv.name} domina esta tarea (+50% XP).")
                 break
 
         # Bonus de Sabiduría para aprender más rápido
