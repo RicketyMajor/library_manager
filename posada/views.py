@@ -57,6 +57,7 @@ def guild_status(request):
                 "talento": adv.talento, "real": adv.real, "marco": adv.marco
             },
             "wealth_summary": f"{adv.talento}T, {adv.iota}i, {adv.ardite}a",
+            # --- SLOTS ---
             "equip_main_hand": adv.equip_main_hand.name if adv.equip_main_hand else "Desarmado",
             "equip_off_hand": adv.equip_off_hand.name if adv.equip_off_hand else "Vacío",
             "equip_head": adv.equip_head.name if adv.equip_head else "Vacío",
@@ -64,7 +65,13 @@ def guild_status(request):
             "equip_hands": adv.equip_hands.name if adv.equip_hands else "Vacío",
             "equip_legs": adv.equip_legs.name if adv.equip_legs else "Vacío",
             "equip_feet": adv.equip_feet.name if adv.equip_feet else "Vacío",
-            "equip_accessory": adv.equip_accessory.name if adv.equip_accessory else "Ninguno",
+
+            # Joyería Modular
+            "equip_necklace": adv.equip_necklace.name if adv.equip_necklace else "Ninguno",
+            "equip_ring_1": adv.equip_ring_1.name if adv.equip_ring_1 else "Vacío",
+            "equip_ring_2": adv.equip_ring_2.name if adv.equip_ring_2 else "Vacío",
+            "equip_bracelet": adv.equip_bracelet.name if adv.equip_bracelet else "Ninguno",
+            "equip_earring": adv.equip_earring.name if adv.equip_earring else "Ninguno",
 
             "fatigue": adv.fatigue_stacks
         })

@@ -245,14 +245,18 @@ class AdventurerDetailsModal(ModalScreen[None]):
                 # --- SECCIÓN DE EQUIPO ---
                 yield Label("Equipo:", classes="section_title")
                 with Grid(classes="inv_grid"):
-                    yield Label(f"🗡️ Mano Principal: {a.get('equip_main_hand')}")
-                    yield Label(f"🛡️ Mano Secundaria: {a.get('equip_off_hand')}")
+                    yield Label(f"🗡️ M. Principal: {a.get('equip_main_hand')}")
+                    yield Label(f"🛡️ M. Secundaria: {a.get('equip_off_hand')}")
                     yield Label(f"🪖 Cabeza: {a.get('equip_head')}")
                     yield Label(f"👕 Torso: {a.get('equip_torso')}")
                     yield Label(f"🧤 Manos: {a.get('equip_hands')}")
                     yield Label(f"👖 Piernas: {a.get('equip_legs')}")
                     yield Label(f"👟 Pies: {a.get('equip_feet')}")
-                    yield Label(f"📿 Accesorio: {a.get('equip_accessory')}")
+                    yield Label(f"📿 Collar: {a.get('equip_necklace')}")
+                    yield Label(f"💍 Anillo 1: {a.get('equip_ring_1')}")
+                    yield Label(f"💍 Anillo 2: {a.get('equip_ring_2')}")
+                    yield Label(f"腕 Brazalete: {a.get('equip_bracelet')}")
+                    yield Label(f"👂 Aretes: {a.get('equip_earring')}")
                     yield Label("")
 
                 # --- SECCIÓN DE COMBATE ---
