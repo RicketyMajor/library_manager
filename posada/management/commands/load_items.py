@@ -261,8 +261,8 @@ class Command(BaseCommand):
             },
 
             {
-                "name": "Pantalones de Malla de Cobre",
-                "description": "Unos pantalones hechos de mallas de cobre. Son además de resistentes, flexibles.",
+                "name": "Brafoneras de Malla de Cobre",
+                "description": "Unas brafoneras hechas de mallas de cobre. Son además de resistentes, flexibles.",
                 "item_type": "LGS",
                 "rarity": "COM",
                 "allowed_classes": ["FTR", "PAL"],
@@ -318,8 +318,8 @@ class Command(BaseCommand):
             },
 
             {
-                "name": "Pantalones de Cota de Anillas",
-                "description": "Unos pantalones hechos de cuero con unas pesadas anillas cosidas, que ayudan a reforzar la armadura contra los golpes de hachas y espadas.",
+                "name": "Brafoneras de Cota de Anillas",
+                "description": "Unas brafoneras hechos de cuero con unas pesadas anillas cosidas, que ayudan a reforzar la armadura contra los golpes de hachas y espadas.",
                 "item_type": "LGS",
                 "rarity": "COM",
                 "allowed_classes": ["FTR", "PAL", "CLR", "DRD", "RGR", "ART"],
@@ -342,7 +342,7 @@ class Command(BaseCommand):
             },
 
             {
-                "name": "Guantes de Cota de Anillas",
+                "name": "Guanteletes de Cota de Anillas",
                 "description": "Unos guantes hechos de cuero con unas pesadas anillas cosidas, que ayudan a reforzar la armadura contra los golpes de hachas y espadas.",
                 "item_type": "HND",
                 "rarity": "COM",
@@ -351,6 +351,59 @@ class Command(BaseCommand):
                 "cost_talento": 1,
                 "cost_iota": 5,
                 "bonus_armor": 4,
+            },
+
+            # CONJUNTO DE ARMADURA DE PLACAS DE BRONCE (COMÚN)
+
+            {
+                "name": "Yelmo de Placas de Bronce",
+                "description": "Un yelmo formado por placas de bronce interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para la cabeza.",
+                "item_type": "HED",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 2,
+                "bonus_armor": 5,
+            },
+
+            {
+                "name": "Peto de Placas de Bronce",
+                "description": "Un peto formado por placas de bronce interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para el torso.",
+                "item_type": "TRS",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 2,
+                "bonus_armor": 5,
+            },
+
+
+            {
+                "name": "Grebas de Placas de Bronce",
+                "description": "Unas grebas formadas por placas de bronce interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para las piernas.",
+                "item_type": "FET",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 2,
+                "bonus_armor": 5,
+            },
+
+            {
+                "name": "Botas de Placas de Bronce",
+                "description": "Unas botas formadas por placas de bronce interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para los pies.",
+                "item_type": "FET",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 2,
+                "bonus_armor": 5,
+            },
+
+            {
+                "name": "Guanteletes de Placas de Bronce",
+                "description": "Unos guanteletes formadas por placas de bronce interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para las manos.",
+                "item_type": "HND",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 2,
+                "bonus_armor": 5,
             },
 
 
