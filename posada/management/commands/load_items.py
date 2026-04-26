@@ -375,7 +375,6 @@ class Command(BaseCommand):
                 "bonus_armor": 5,
             },
 
-
             {
                 "name": "Grebas de Placas de Bronce",
                 "description": "Unas grebas formadas por placas de bronce interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para las piernas.",
@@ -406,7 +405,17 @@ class Command(BaseCommand):
                 "bonus_armor": 5,
             },
 
+            # DAGA DE HIERRO (COMÚN)
 
+            {
+                "name": "Daga de Hierro",
+                "description": "Una daga hecha de hierro, ligera para el combate cuerpo a cuerpo.",
+                "item_type": "W1H",
+                "rarity": "COM",
+                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "WIZ", "SOR", "WLK", "ROG", "BRD"],
+                "cost_talento": 1,
+                "bonus_damage": 2,
+            },
 
         ]
 
