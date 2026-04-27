@@ -262,7 +262,7 @@ class AdventurerDetailsModal(ModalScreen[None]):
                 # --- SECCIÓN DE COMBATE ---
                 yield Label("Efectividad en Combate:", classes="section_title")
                 with Grid(classes="stats_grid"):
-                    yield Label(f"⚔️ Daño Base Aumentado: +{a.get('combat_damage')}")
+                    yield Label(f"⚔️ Daño Total: {a.get('combat_damage')}")
                     yield Label(f"🛡️ Armadura Total: {a.get('combat_armor')}")
                 # --- SECCIÓN DE RIQUEZA ---
                 yield Label("Tesoro Personal:", classes="section_title")

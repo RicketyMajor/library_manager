@@ -48,7 +48,7 @@ def guild_status(request):
 
             # --- Combate Real ---
             "combat_armor": mods['armor'],
-            "combat_damage": mods['damage'],
+            "combat_damage": f"{mods['weapon_dice_count']}d{mods['weapon_dice_sides']} + {mods['damage']}",
 
             "wealth": {
                 "iron_half_penny": adv.iron_half_penny, "iron_penny": adv.iron_penny,
