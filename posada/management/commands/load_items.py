@@ -412,9 +412,25 @@ class Command(BaseCommand):
                 "description": "Una daga hecha de hierro, ligera para el combate cuerpo a cuerpo.",
                 "item_type": "W1H",
                 "rarity": "COM",
-                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "WIZ", "SOR", "WLK", "ROG", "BRD"],
+                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "WIZ", "SOR", "WLK", "ROG", "BRD", "MNK"],
                 "cost_talento": 1,
-                "bonus_damage": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 4,
+                "bonus_damage": 0,
+            },
+
+            # ESPADA CORTA DE HIERRO (COMÚN)
+
+            {
+                "name": "Espada Corta de Hierro",
+                "description": "Una espada corta hecha de hierro, adecuada para el combate cuerpo a cuerpo.",
+                "item_type": "W1H",
+                "rarity": "COM",
+                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "WIZ", "SOR", "WLK", "ROG", "BRD", "MNK"],
+                "cost_real": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 6,
+                "bonus_damage": 0,
             },
 
         ]
