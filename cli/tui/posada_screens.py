@@ -406,6 +406,15 @@ class PosadaMainScreen(Screen):
         border-top: solid $primary;
         padding: 0 1;
     }
+    Log {
+        text-opacity: 0.9;
+    }
+    .log-damage {
+        color: $error;
+        text-style: bold;
+    }
+
+    
     """
 
     def compose(self) -> ComposeResult:

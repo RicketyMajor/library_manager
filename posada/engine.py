@@ -2,7 +2,7 @@ import random
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum
-from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic, InventorySlot, Monster
+from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic, InventorySlot, Monster, ItemRarity
 
 XP_PER_MINUTE = 10
 # Bono si la clase del aventurero hace sinergia con la tarea
@@ -209,9 +209,14 @@ def generate_session_script(session_id, duration_minutes, adventurers_qs):
                                     it for it in all_items_db if it.rarity == rarity]
                                 if pool:
                                     drop_item = random.choice(pool)
+                                    color = ItemRarity.get_color(
+                                        drop_item.rarity)
                                     winner = get_adv_for_item(drop_item)
-                                    script.append({"second": current_second, "type": "item_loot", "item_id": drop_item.id,
-                                                  "adventurer_id": winner.id, "message": f"¡BOTÍN RARO! {winner.name} obtuvo [{drop_item.name}]."})
+                                    script.append({
+                                        "second": current_second, "type": "item_loot", "item_id": drop_item.id,
+                                        "adventurer_id": winner.id,
+                                        "message": f"¡BOTÍN RARO! {winner.name} obtuvo [[{color}]{drop_item.name}[/]]."
+                                    })
 
                         active_monsters_group.remove(target_m)
                 else:
@@ -303,25 +308,31 @@ def get_item_score(item):
 
 def _auto_equip(adv, item, event_log, pull_type):
     """Evalúa si el objeto es mejor y guarda lo sobrante en la mochila."""
+    color = ItemRarity.get_color(item.rarity)  # Color según la rareza
+
     if not is_class_allowed(adv, item):
         InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
         event_log.append(
-            f"{adv.name} guardó [{item.name}] (Su clase no puede usarlo).")
+            f"{adv.name} guardó [[{color}]{item.name}[/]] (Incompatible).")
         return
 
-    # Consumibles y Misceláneos
+    # Consumibles
     if item.item_type == 'CNS':
         if adv.current_hp < adv.max_hp:
             adv.current_hp = min(adv.max_hp, adv.current_hp + 10)
             event_log.append(
-                f"{adv.name} bebió [{item.name}] y recuperó HP.")
+                f"{adv.name} bebió [[{color}]{item.name}[/]] y recuperó HP.")
         else:
             InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+            event_log.append(
+                f"{adv.name} guardó el objeto [[{color}]{item.name}[/]].")
         return
+
+    # Misceláneos
     elif item.item_type == 'MSC':
         InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
         event_log.append(
-            f"{adv.name} guardó el objeto de lujo [{item.name}].")
+            f"{adv.name} guardó el objeto de lujo [[{color}]{item.name}[/]].")
         return
 
     score_new = get_item_score(item)
@@ -342,7 +353,8 @@ def _auto_equip(adv, item, event_log, pull_type):
             if old_item:
                 InventorySlot.objects.create(
                     adventurer=adv, item=old_item, quantity=1)
-            event_log.append(f"💍 {adv.name} se equipó [{item.name}].")
+            event_log.append(
+                f"💍 {adv.name} se equipó [[{color}]{item.name}[/]].")
             adv.save()
         else:
             InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
@@ -379,7 +391,7 @@ def _auto_equip(adv, item, event_log, pull_type):
                 adventurer=adv, item=adv.equip_off_hand, quantity=1)
             adv.equip_off_hand = None
 
-        event_log.append(f"{adv.name} se equipó [{item.name}].")
+        event_log.append(f"{adv.name} se equipó [[{color}]{item.name}[/]].")
         adv.save()
     else:
         InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)

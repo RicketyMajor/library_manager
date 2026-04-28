@@ -1,11 +1,19 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, Item
+from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, Item, ItemRarity
 import random
 from .engine import process_session_completion, generate_session_script, consolidate_wealth, distribute_random_stats, evaluate_daily_penalties
 from django.utils import timezone
 from datetime import timedelta
+
+
+def fmt_item_rich(item, default="Vacío"):
+    """Devuelve el nombre del item envuelto en su color de rareza para la TUI."""
+    if not item:
+        return default
+    color = ItemRarity.get_color(item.rarity)
+    return f"[{color}]{item.name}[/]"
 
 
 @api_view(['GET'])
@@ -58,20 +66,18 @@ def guild_status(request):
             },
             "wealth_summary": f"{adv.talento}T, {adv.iota}i, {adv.ardite}a",
             # --- SLOTS ---
-            "equip_main_hand": adv.equip_main_hand.name if adv.equip_main_hand else "Desarmado",
-            "equip_off_hand": adv.equip_off_hand.name if adv.equip_off_hand else "Vacío",
-            "equip_head": adv.equip_head.name if adv.equip_head else "Vacío",
-            "equip_torso": adv.equip_torso.name if adv.equip_torso else "Ropa común",
-            "equip_hands": adv.equip_hands.name if adv.equip_hands else "Vacío",
-            "equip_legs": adv.equip_legs.name if adv.equip_legs else "Vacío",
-            "equip_feet": adv.equip_feet.name if adv.equip_feet else "Vacío",
-
-            # Joyería Modular
-            "equip_necklace": adv.equip_necklace.name if adv.equip_necklace else "Ninguno",
-            "equip_ring_1": adv.equip_ring_1.name if adv.equip_ring_1 else "Vacío",
-            "equip_ring_2": adv.equip_ring_2.name if adv.equip_ring_2 else "Vacío",
-            "equip_bracelet": adv.equip_bracelet.name if adv.equip_bracelet else "Ninguno",
-            "equip_earring": adv.equip_earring.name if adv.equip_earring else "Ninguno",
+            "equip_main_hand": fmt_item_rich(adv.equip_main_hand, "Desarmado"),
+            "equip_off_hand": fmt_item_rich(adv.equip_off_hand),
+            "equip_head": fmt_item_rich(adv.equip_head),
+            "equip_torso": fmt_item_rich(adv.equip_torso, "Ropa común"),
+            "equip_hands": fmt_item_rich(adv.equip_hands),
+            "equip_legs": fmt_item_rich(adv.equip_legs),
+            "equip_feet": fmt_item_rich(adv.equip_feet),
+            "equip_necklace": fmt_item_rich(adv.equip_necklace, "Ninguno"),
+            "equip_ring_1": fmt_item_rich(adv.equip_ring_1),
+            "equip_ring_2": fmt_item_rich(adv.equip_ring_2),
+            "equip_bracelet": fmt_item_rich(adv.equip_bracelet, "Ninguno"),
+            "equip_earring": fmt_item_rich(adv.equip_earring, "Ninguno"),
 
             "fatigue": adv.fatigue_stacks
         })
