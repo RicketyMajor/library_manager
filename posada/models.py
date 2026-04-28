@@ -403,6 +403,10 @@ class Monster(models.Model):
     rarity = models.CharField(
         max_length=3, choices=ItemRarity.choices, default=ItemRarity.COMMON)
 
+    # Cantidad de monstruos que pueden aparecer en un solo grupo
+    min_spawn = models.PositiveIntegerField(default=1)
+    max_spawn = models.PositiveIntegerField(default=1)
+
     base_hp = models.PositiveIntegerField(default=10)
 
     # Daño basado en dados (Ej: 1d6 + 2)

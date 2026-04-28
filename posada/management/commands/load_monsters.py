@@ -1,0 +1,56 @@
+from django.core.management.base import BaseCommand
+from posada.models import Monster
+
+
+class Command(BaseCommand):
+    help = 'Puebla la base de datos con el bestiario de Monstruos.'
+
+    def handle(self, *args, **kwargs):
+        # ==========================================
+        # BESTIARIO
+        # ==========================================
+        BESTIARIO = [
+            # 🟢 EJEMPLO 1: Monstruo Pequeño en grupo
+            {
+                "name": "Goblin Saqueador",
+                "category": "SML",  # Pequeño
+                "rarity": "COM",
+                "min_spawn": 2, "max_spawn": 5,  # Aparecen en grupos de 2 a 5
+                "base_hp": 8,
+                "damage_dice_count": 1, "damage_dice_sides": 4, "bonus_damage": 0,  # Daño 1d4
+                "loot_multiplier": 1.0, "xp_reward": 15
+            },
+            # 🟡 EJEMPLO 2: Monstruo Mediano solo o en pareja
+            {
+                "name": "Orco Berserker",
+                "category": "MED",  # Mediano
+                "rarity": "UNC",
+                "min_spawn": 1, "max_spawn": 2,
+                "base_hp": 25,
+                "damage_dice_count": 1, "damage_dice_sides": 8, "bonus_damage": 2,  # Daño 1d8 + 2
+                "loot_multiplier": 2.5, "xp_reward": 60
+            },
+            # 🔴 EJEMPLO 3: Jefe Épico (Siempre solo)
+            {
+                "name": "Beholder Anciano",
+                "category": "EPC",  # Épico
+                "rarity": "LEG",
+                "min_spawn": 1, "max_spawn": 1,
+                "base_hp": 150,
+                "damage_dice_count": 3, "damage_dice_sides": 6, "bonus_damage": 5,  # Daño 3d6 + 5
+                "loot_multiplier": 10.0, "xp_reward": 500
+            },
+        ]
+
+        self.stdout.write("Engendrando monstruos en el mundo...")
+        creados = 0
+        for data in BESTIARIO:
+            obj, created = Monster.objects.update_or_create(
+                name=data["name"],
+                defaults={k: v for k, v in data.items() if k != "name"}
+            )
+            if created:
+                creados += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f'¡Se engendraron {creados} monstruos nuevos!'))

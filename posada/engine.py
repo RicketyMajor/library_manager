@@ -2,7 +2,7 @@ import random
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum
-from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic, InventorySlot
+from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic, InventorySlot, Monster
 
 XP_PER_MINUTE = 10
 # Bono si la clase del aventurero hace sinergia con la tarea
@@ -25,6 +25,22 @@ CATEGORY_SYNERGY = {
     "ayudantia": ["BRD", "CLR", "PAL"]
 }
 
+FLAVOR_MONSTER = {
+    'SML': ["ríe maliciosamente en la penumbra.", "se escabulle entre las sombras rápidamente.", "emite un chillido agudo y molesto."],
+    'MED': ["gruñe mostrando los colmillos.", "golpea su arma contra el suelo amenazantemente.", "te observa con ojos sedientos de sangre."],
+    'LRG': ["suelta un rugido que hace temblar la sala.", "toma aire pesadamente, preparándose para aplastar.", "destroza parte del escenario con su tamaño."],
+    'EPC': ["irradia un aura de terror insoportable.", "te mira como si fueras un simple insecto.", "levita levemente mientras el aire se distorsiona."]
+}
+
+FLAVOR_ADV = [
+    "toma firmemente su arma, listo para cualquier cosa.",
+    "se limpia el sudor de la frente sin apartar la mirada.",
+    "calcula la distancia exacta entre él y el enemigo.",
+    "murmura una pequeña plegaria al destino.",
+    "adopta una postura defensiva, esperando el impacto.",
+    "hace crujir sus nudillos con una sonrisa confiada."
+]
+
 
 def generate_session_script(session_id, duration_minutes, adventurers_qs):
     random.seed(session_id)
@@ -36,113 +52,176 @@ def generate_session_script(session_id, duration_minutes, adventurers_qs):
         random.seed()
         return script
 
-    # 1. Botín Constante (Cada minuto: 1/2 Hierro, Hierro, Ardites)
-    for m in range(duration_minutes):
-        sec = (m * 60) + random.randint(5, 55)
-        adv = random.choice(adventurers)
-        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
+    monsters_db = list(Monster.objects.all())
+    all_items_db = list(Item.objects.all())
 
-        # Siempre encuentras Medios Peniques de Hierro
-        hp_amount = random.randint(2, 5) + luk_bonus
-        script.append({"second": sec, "type": "loot", "coin": "iron_half_penny", "amount": hp_amount,
-                      "message": f"{adv.name} recogió {hp_amount} medio(s) penique(s) de hierro."})
+    state = "EXPLORING"
+    current_second = 0
+    active_monsters_group = []  # Lista para manejar a los grupos
 
-        if random.random() < 0.80:
-            script.append({"second": sec+1, "type": "loot", "coin": "iron_penny",
-                          "amount": random.randint(1, 2), "message": f"{adv.name} encontró peniques de hierro."})
-        if random.random() < 0.60:
-            script.append({"second": sec+2, "type": "loot", "coin": "ardite",
-                          "amount": random.randint(1, 3), "message": f"{adv.name} halló un par de ardites."})
+    # --- Tablas de Botín por Categoría ---
+    # (moneda, cant_max, probabilidad)
+    coin_drops = {
+        'SML': [('iron_penny', 5, 0.8), ('ardite', 3, 0.5), ('copper_penny', 1, 0.1)],
+        'MED': [('copper_penny', 5, 0.8), ('drabin', 3, 0.5), ('silver_penny', 1, 0.2)],
+        'LRG': [('silver_penny', 6, 0.9), ('sueldo', 2, 0.6), ('talento', 1, 0.1)],
+        'EPC': [('sueldo', 5, 1.0), ('talento', 3, 0.8), ('real', 1, 0.3), ('marco', 1, 0.05)]
+    }
+    # (rareza, prob_base) -> luk_bonus sube la prob
+    item_drops = {
+        'SML': [('COM', 0.05), ('UNC', 0.01)],
+        'MED': [('UNC', 0.10), ('RAR', 0.02)],
+        'LRG': [('RAR', 0.15), ('EPC', 0.05)],
+        'EPC': [('EPC', 0.25), ('LEG', 0.10)]
+    }
 
-    # Botín Intermedio (Cada 10 minutos: Cobre y Drabines)
-    blocks_10 = duration_minutes // 10
-    for i in range(blocks_10):
-        adv = random.choice(adventurers)
-        sec = random.randint(i * 600, (i+1) * 600 - 1)
-        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
+    def get_adv_for_item(item):
+        """Busca quién necesita más el ítem o puede usarlo."""
+        if item.item_type == 'MSC':
+            return random.choice(adventurers)
+        valid_advs = [a for a in adventurers if is_class_allowed(a, item)]
+        if not valid_advs:
+            return random.choice(adventurers)
+        # El que tenga menos items equipados tiene prioridad
+        valid_advs.sort(key=lambda a: len(a.get_equipped_items()))
+        return valid_advs[0]
 
-        if random.random() < (0.60 + (luk_bonus * 0.02)):
-            script.append({"second": sec, "type": "loot", "coin": "drabin",
-                          "amount": 1, "message": f"{adv.name} desenterró 1 Drabín."})
-        if random.random() < (0.40 + (luk_bonus * 0.02)):
-            script.append({"second": sec+1, "type": "loot", "coin": "copper_penny",
-                          "amount": 1, "message": f"{adv.name} encontró 1 Penique de Cobre."})
+    while current_second < total_seconds:
+        if state == "EXPLORING":
+            current_second += 60
+            if current_second >= total_seconds:
+                break
 
-    # Botín Mayor (Cada 25 minutos: Iotas y Plata)
-    blocks_25 = duration_minutes // 25
-    for i in range(blocks_25):
-        adv = random.choice(adventurers)
-        sec = random.randint(i * 1500, (i+1) * 1500 - 1)
-        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
+            adv = random.choice(adventurers)
+            luk_bonus = adv.base_luk + \
+                sum(item.bonus_luk for item in adv.get_equipped_items())
 
-        if random.random() < (0.50 + (luk_bonus * 0.02)):
-            script.append({"second": sec, "type": "loot", "coin": "iota", "amount": 1,
-                          "message": f"{adv.name} desenterró 1 Iota brillante."})
-        if random.random() < (0.25 + (luk_bonus * 0.02)):
-            script.append({"second": sec+1, "type": "loot", "coin": "silver_penny",
-                          "amount": 1, "message": f"¿Qué es lo que brilla? {adv.name} encontró 1 Penique de Plata."})
+            # Tirada de Encuentro
+            if monsters_db and random.random() < 0.15:
+                base_monster = random.choice(monsters_db)
+                spawn_count = random.randint(
+                    base_monster.min_spawn, base_monster.max_spawn)
 
-    # 4. Botín Épico (Cada 50 minutos: Sueldos, Talentos, Reales)
-    blocks_50 = duration_minutes // 50
-    for i in range(blocks_50):
-        adv = random.choice(adventurers)
-        sec = random.randint(i * 3000, (i+1) * 3000 - 1)
-        luk_bonus = sum(item.bonus_luk for item in adv.get_equipped_items())
+                # Genera cada individuo del grupo
+                for i in range(spawn_count):
+                    pts_map = {'SML': 15, 'MED': 25, 'LRG': 45, 'EPC': 65}
+                    pts = pts_map.get(base_monster.category, 15)
+                    m_stats = {'str': 0, 'dex': 0, 'con': 0,
+                               'int': 0, 'wis': 0, 'cha': 0, 'luk': 0}
+                    keys = list(m_stats.keys())
+                    for _ in range(pts):
+                        m_stats[random.choice(keys)] += 1
 
-        if random.random() < (0.30 + (luk_bonus * 0.02)):
-            script.append({"second": sec, "type": "loot", "coin": "sueldo",
-                          "amount": 1, "message": f"{adv.name} encontró 1 Sueldo de plata."})
-        elif random.random() < (0.10 + (luk_bonus * 0.01)):
-            script.append({"second": sec+1, "type": "loot", "coin": "talento",
-                          "amount": 1, "message": f"¡UN TALENTO! {adv.name} ríe de alegría."})
-        elif random.random() < (0.02 + (luk_bonus * 0.01)):
-            script.append({"second": sec+2, "type": "loot", "coin": "real", "amount": 1,
-                          "message": f"¡INCREÍBLE! {adv.name} ha encontrado un REAL en perfecto estado."})
+                    hp = base_monster.base_hp + (m_stats['con'] * 2)
+                    name = f"{base_monster.name} {'ABCDEF'[i]}" if spawn_count > 1 else base_monster.name
 
-    # Pity System del Marco de Oro
-    total_history = DeepWorkSession.objects.filter(completed=True).aggregate(
-        Sum('duration_minutes'))['duration_minutes__sum'] or 0
-    if (total_history % 600) + duration_minutes >= 600:
-        adv = random.choice(adventurers)
-        sec = random.randint(10, total_seconds - 10)
-        script.append({"second": sec, "type": "loot", "coin": "marco", "amount": 1,
-                      "message": f"¡GLORIA! La persistencia rinde frutos. {adv.name} ha desenterrado un MARCO DE ORO."})
+                    active_monsters_group.append({
+                        'name': name, 'hp': hp, 'stats': m_stats, 'base': base_monster
+                    })
 
-    # Combate Real
-    ambush_blocks = duration_minutes // 20
-    for i in range(ambush_blocks):
-        adv = random.choice(adventurers)
+                msg = f"¡EMBOSCADA! Un grupo de {spawn_count} [bold red]{base_monster.name}s[/bold red] corta el paso." if spawn_count > 1 else f"¡PELIGRO! Un [bold red]{base_monster.name}[/bold red] bloquea el camino."
+                script.append({"second": current_second,
+                              "type": "flavor", "message": msg})
+                state = "COMBAT"
+                continue
 
-        # ARMADURA Y CONSTITUCIÓN reducen el riesgo
-        armor_val = sum(item.bonus_armor for item in adv.get_equipped_items())
-        con_val = adv.base_con + \
-            sum(item.bonus_con for item in adv.get_equipped_items())
+            # Exploración (Botín)
+            hp_amount = random.randint(2, 5) + luk_bonus
+            script.append({"second": current_second - 30, "type": "loot", "coin": "iron_half_penny",
+                          "amount": hp_amount, "message": f"{adv.name} recogió {hp_amount} medio(s) penique(s) de hierro."})
+            if random.random() < (0.30 + (luk_bonus * 0.02)):
+                script.append({"second": current_second - 15, "type": "loot", "coin": "drabin",
+                              "amount": 1, "message": f"{adv.name} desenterró 1 Drabín."})
 
-        ambush_chance = max(0.05, 0.40 - (armor_val * 0.02) - (con_val * 0.01))
+        elif state == "COMBAT":
+            current_second += 15
+            if current_second >= total_seconds:
+                break
 
-        if random.random() < ambush_chance:
-            sec = random.randint(i * 1200, (i+1) * 1200 - 1)
-            # El daño real considera la armadura como mitigación
-            damage = random.randint(8, 18) - armor_val
-            damage = max(1, damage)
-            script.append({
-                "second": sec, "type": "damage", "adventurer_id": adv.id, "amount": damage,
-                "message": f"¡EMBOSCADA! {adv.name} recibe {damage} de daño."
-            })
-        else:
-            sec = random.randint(i * 1200, (i+1) * 1200 - 1)
-            script.append({"second": sec, "type": "flavor",
-                          "message": f"{adv.name} bloqueó un ataque usando su armadura."})
+            # --- INMERSIÓN (1 por ronda) ---
+            if random.random() < 0.5:  # 50% aventurero, 50% monstruo
+                f_adv = random.choice(adventurers)
+                script.append({"second": current_second - 12, "type": "flavor",
+                              "message": f"{f_adv.name} {random.choice(FLAVOR_ADV)}"})
+            else:
+                f_mon = random.choice(active_monsters_group)
+                flav = random.choice(FLAVOR_MONSTER.get(
+                    f_mon['base'].category, FLAVOR_MONSTER['SML']))
+                script.append({"second": current_second - 12, "type": "flavor",
+                              "message": f"El [bold red]{f_mon['name']}[/bold red] {flav}"})
 
-    # Ambientación
-    flavor_texts = ["{} revisa el mapa con una antorcha.", "Se escucha un aullido a lo lejos. {} prepara su arma.",
-                    "El silencio inunda la sala mientras {} avanza cautelosamente."]
-    for _ in range(duration_minutes // 10):
-        sec = random.randint(10, total_seconds - 10)
-        adv = random.choice(adventurers)
-        msg = random.choice(flavor_texts).format(adv.name)
-        script.append(
-            {"second": sec, "type": "flavor", "message": f"🏕️ {msg}"})
+            # --- TURNO DE LOS MONSTRUOS ---
+            for m in active_monsters_group:
+                target = random.choice(adventurers)
+                adv_mods = target.get_stat_modifiers()
+                m_roll = random.randint(1, 20) + m['stats']['dex']
+                adv_evasion = 10 + adv_mods['dex']
+
+                if m_roll >= adv_evasion:
+                    base_m = m['base']
+                    m_dmg_dice = sum(random.randint(1, base_m.damage_dice_sides)
+                                     for _ in range(base_m.damage_dice_count))
+                    m_dmg = m_dmg_dice + \
+                        base_m.bonus_damage + m['stats']['str']
+                    final_dmg = max(1, m_dmg - adv_mods['armor'])
+                    script.append({"second": current_second - 8, "type": "damage", "adventurer_id": target.id, "amount": final_dmg,
+                                  "message": f"[bold red]{m['name']}[/bold red] golpea a {target.name} ({final_dmg} daño)."})
+                else:
+                    script.append({"second": current_second - 8, "type": "flavor",
+                                  "message": f"{target.name} esquivó el ataque de [bold red]{m['name']}[/bold red]."})
+
+            # --- TURNO DE LOS AVENTUREROS ---
+            for i, adv in enumerate(adventurers):
+                if not active_monsters_group:
+                    break  # Si murieron todos, paran de atacar
+
+                target_m = random.choice(active_monsters_group)
+                adv_mods = adv.get_stat_modifiers()
+                a_roll = random.randint(1, 20) + adv_mods['dex']
+                m_evasion = 10 + target_m['stats']['dex']
+
+                if a_roll >= m_evasion:
+                    sides = adv_mods.get('weapon_dice_sides', 4) or 4
+                    count = adv_mods.get('weapon_dice_count', 1) or 1
+                    a_dmg = sum(random.randint(1, sides) for _ in range(
+                        count)) + adv_mods['damage'] + adv_mods['str']
+
+                    target_m['hp'] -= a_dmg
+                    script.append({"second": current_second - 4, "type": "flavor",
+                                  "message": f"{adv.name} asesta un golpe de {a_dmg} daño a [bold red]{target_m['name']}[/bold red]."})
+
+                    # Si el monstruo muere, soltar botín y remover del grupo
+                    if target_m['hp'] <= 0:
+                        script.append({"second": current_second - 2, "type": "flavor",
+                                      "message": f"[bold red]{target_m['name']}[/bold red] muerde el polvo."})
+
+                        # Generar Monedas
+                        for coin, max_amt, prob in coin_drops.get(target_m['base'].category, []):
+                            if random.random() < prob:
+                                amt = random.randint(1, max_amt)
+                                script.append({"second": current_second - 1, "type": "loot", "coin": coin, "amount": amt,
+                                              "message": f"El monstruo soltó {amt} {coin.replace('_', ' ').title()}."})
+
+                        # Generar Items Raros
+                        for rarity, base_prob in item_drops.get(target_m['base'].category, []):
+                            if random.random() < (base_prob + (adv.base_luk * 0.01)):
+                                pool = [
+                                    it for it in all_items_db if it.rarity == rarity]
+                                if pool:
+                                    drop_item = random.choice(pool)
+                                    winner = get_adv_for_item(drop_item)
+                                    script.append({"second": current_second, "type": "item_loot", "item_id": drop_item.id,
+                                                  "adventurer_id": winner.id, "message": f"¡BOTÍN RARO! {winner.name} obtuvo [{drop_item.name}]."})
+
+                        active_monsters_group.remove(target_m)
+                else:
+                    script.append({"second": current_second - 4, "type": "flavor",
+                                  "message": f"{adv.name} falla su ataque contra [bold red]{target_m['name']}[/bold red]."})
+
+            if not active_monsters_group:
+                script.append({"second": current_second, "type": "flavor",
+                              "message": "¡VICTORIA! La zona está despejada."})
+                state = "EXPLORING"
 
     script.sort(key=lambda x: x["second"])
     random.seed()
@@ -371,6 +450,19 @@ def process_session_completion(session_id, survived_seconds=None):
                 adv_id = event["adventurer_id"]
                 damage_taken[adv_id] = damage_taken.get(
                     adv_id, 0) + event["amount"]
+            # guardar items en el inventario del aventurero
+            elif event["type"] == "item_loot":
+                adv = next((a for a in adventurers if a.id ==
+                           event["adventurer_id"]), None)
+                if adv:
+                    try:
+                        item_obj = Item.objects.get(id=event["item_id"])
+                        InventorySlot.objects.create(
+                            adventurer=adv, item=item_obj, quantity=1)
+                        event_log.append(
+                            f"{adv.name} guardó [{item_obj.name}] en su mochila.")
+                    except Item.DoesNotExist:
+                        pass
 
     # Aplicar daño real a los Puntos de Vida
     for adv in adventurers:
