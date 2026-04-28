@@ -1,9 +1,9 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, Item, ItemRarity
+from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, InventorySlot, ItemRarity
 import random
-from .engine import process_session_completion, generate_session_script, consolidate_wealth, distribute_random_stats, evaluate_daily_penalties
+from .engine import process_session_completion, generate_session_script, consolidate_wealth, distribute_random_stats, evaluate_daily_penalties, universal_consolidate
 from django.utils import timezone
 from datetime import timedelta
 
@@ -358,3 +358,84 @@ def get_stats_data(request):
         "screen_time": [s.screen_time_minutes for s in stats]
     }
     return Response(data)
+
+
+@api_view(['GET'])
+def get_inventory(request, target_type, target_id):
+    """Obtiene el contenido de una mochila (aventurero) o del cofre (gremio)."""
+    if target_type == 'guild':
+        slots = InventorySlot.objects.filter(
+            guild_id=target_id, quantity__gt=0)
+    else:
+        slots = InventorySlot.objects.filter(
+            adventurer_id=target_id, quantity__gt=0)
+
+    data = []
+    for s in slots:
+        data.append({
+            "slot_id": s.id,
+            "item_name": s.item.name,
+            "color": ItemRarity.get_color(s.item.rarity),
+            "type": s.item.get_item_type_display(),
+            "qty": s.quantity,
+            "stats": f"DMG:{s.item.bonus_damage} | ARM:{s.item.bonus_armor}"
+        })
+    return Response({"slots": data})
+
+
+@api_view(['POST'])
+def inventory_action(request):
+    """Mueve objetos entre el Cofre y los Aventureros, o los vende."""
+    action = request.data.get('action')
+    slot_id = request.data.get('slot_id')
+    adv_id = request.data.get('adv_id')
+
+    try:
+        slot = InventorySlot.objects.get(id=slot_id)
+        guild = GuildProfile.objects.get(id=1)
+
+        if action == "to_guild":
+            if not slot.adventurer:
+                return Response({"error": "Ya está en el cofre"}, status=400)
+            g_slot, _ = InventorySlot.objects.get_or_create(
+                guild=guild, item=slot.item, adventurer=None, defaults={'quantity': 0})
+            g_slot.quantity += 1
+            g_slot.save()
+
+        elif action == "to_adv":
+            if not slot.guild:
+                return Response({"error": "No está en el cofre"}, status=400)
+            target_adv = Adventurer.objects.get(id=adv_id)
+            a_slot, _ = InventorySlot.objects.get_or_create(
+                adventurer=target_adv, item=slot.item, guild=None, defaults={'quantity': 0})
+            a_slot.quantity += 1
+            a_slot.save()
+
+        elif action == "sell":
+            # Extrae el valor del objeto y lo inyecta al Gremio
+            item = slot.item
+            guild.iron_half_penny += item.cost_iron_half_penny
+            guild.iron_penny += item.cost_iron_penny
+            guild.ardite += item.cost_ardite
+            guild.drabin += item.cost_drabin
+            guild.copper_penny += item.cost_copper_penny
+            guild.iota += item.cost_iota
+            guild.silver_penny += item.cost_silver_penny
+            guild.sueldo += item.cost_sueldo
+            guild.talento += item.cost_talento
+            guild.real += item.cost_real
+            guild.marco += item.cost_marco
+            guild.save()
+            universal_consolidate(guild)  # Ordena el dinero automáticamente
+
+        # Restar 1 al slot original (o borrarlo si queda vacío)
+        slot.quantity -= 1
+        if slot.quantity <= 0:
+            slot.delete()
+        else:
+            slot.save()
+
+        return Response({"status": "success", "message": "Acción completada con éxito."})
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)

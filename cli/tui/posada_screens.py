@@ -280,11 +280,124 @@ class AdventurerDetailsModal(ModalScreen[None]):
                     yield Label(f"🔘 P. Hierro: {w.get('iron_penny', 0)}")
                     yield Label(f"🟤 1/2 P. Hierro: {w.get('iron_half_penny', 0)}")
 
+            yield Button("Abrir Mochila", variant="success", id="btn_open_backpack")
             yield Button("Cerrar Ficha", variant="primary", id="btn_close_details")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_close_details":
             self.dismiss(None)
+        elif event.button.id == "btn_open_backpack":
+            # Lanza el Modal de Inventario sobre este modal
+            self.app.push_screen(InventoryModal(
+                "adv", self.adv_data["id"], f"Mochila de {self.adv_data['name']}"))
+
+# --- MODAL DE GESTIÓN DE INVENTARIO ---
+
+
+class InventoryModal(ModalScreen[None]):
+    """Visor de mochilas y cofre del gremio."""
+
+    CSS = """
+    #inv_dialog { width: 80; height: 35; padding: 1 2; border: heavy $accent; background: $surface; }
+    .inv_title { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; width: 100%; }
+    .btn_row { height: 3; margin-top: 1; align: center middle; }
+    .btn_row Button { margin: 0 1; }
+    #select_adv { width: 30; margin-right: 1; }
+    """
+
+    def __init__(self, target_type: str, target_id: int, title: str, **kwargs):
+        super().__init__(**kwargs)
+        self.target_type = target_type
+        self.target_id = target_id
+        self.modal_title = title
+        self.slots_cache = []
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="inv_dialog"):
+            yield Label(self.modal_title, classes="inv_title")
+            yield DataTable(id="inventory_table")
+
+            with Horizontal(classes="btn_row"):
+                if self.target_type == "adv":
+                    yield Button("Enviar Objeto al Cofre", id="btn_to_guild", variant="primary")
+                    yield Button("Vender Chatarra", id="btn_sell", variant="warning")
+                else:
+                    yield Button("Vender Chatarra", id="btn_sell", variant="warning")
+                    # se llena de forma dinámica
+                    yield Select([], id="select_adv")
+                    yield Button("Dar a Aventurero", id="btn_to_adv", variant="success")
+
+                yield Button("Cerrar", id="btn_close_inv", variant="error")
+
+    def on_mount(self):
+        table = self.query_one("#inventory_table", DataTable)
+        table.add_columns("Cant.", "Objeto", "Tipo", "Stats")
+        self.fetch_inventory()
+        if self.target_type == "guild":
+            self.fetch_adventurers_for_select()
+
+    @work(thread=True)
+    def fetch_adventurers_for_select(self):
+        resp = httpx.get(f"{API_POSADA_BASE}status/")
+        if resp.status_code == 200:
+            advs = resp.json().get("adventurers", [])
+            self.app.call_from_thread(self.populate_select, advs)
+
+    def populate_select(self, advs):
+        sel = self.query_one("#select_adv", Select)
+        sel.set_options([(a["name"], a["id"]) for a in advs])
+        if advs:
+            sel.value = advs[0]["id"]
+
+    @work(thread=True)
+    def fetch_inventory(self):
+        resp = httpx.get(
+            f"{API_POSADA_BASE}inventory/{self.target_type}/{self.target_id}/")
+        if resp.status_code == 200:
+            self.slots_cache = resp.json().get("slots", [])
+            self.app.call_from_thread(self.refresh_table)
+
+    def refresh_table(self):
+        table = self.query_one("#inventory_table", DataTable)
+        table.clear()
+        for s in self.slots_cache:
+            name_rich = f"[[{s['color']}]{s['item_name']}[/]]"
+            table.add_row(str(s['qty']), name_rich, s['type'],
+                          s['stats'], key=str(s['slot_id']))
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "btn_close_inv":
+            self.dismiss(None)
+            return
+
+        table = self.query_one("#inventory_table", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(
+                table.cursor_coordinate).row_key
+            slot_id = int(row_key.value)
+        except Exception:
+            self.app.notify(
+                "Selecciona un objeto de la tabla primero.", severity="warning")
+            return
+
+        if event.button.id == "btn_to_guild":
+            self.send_action("to_guild", slot_id)
+        elif event.button.id == "btn_to_adv":
+            sel = self.query_one("#select_adv", Select).value
+            if not sel:
+                return
+            self.send_action("to_adv", slot_id, sel)
+        elif event.button.id == "btn_sell":
+            self.send_action("sell", slot_id)
+
+    @work(thread=True)
+    def send_action(self, action, slot_id, adv_id=None):
+        payload = {"action": action, "slot_id": slot_id, "adv_id": adv_id}
+        resp = httpx.post(f"{API_POSADA_BASE}inventory/action/", json=payload)
+        if resp.status_code == 200:
+            self.app.call_from_thread(
+                self.app.notify, "Acción completada con éxito.", severity="success")
+            self.app.call_from_thread(self.fetch_inventory)
 
 # --- MODAL DE NUEVO HÁBITO ---
 
