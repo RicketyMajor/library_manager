@@ -457,11 +457,39 @@ class Command(BaseCommand):
                 "rarity": "COM",
                 "allowed_classes": ["RGR", "BBN", "DRD", "FTR", "PAL", "ROG"],
                 "cost_marco": 1,
-                "cost_real": 2,
+                "cost_talento": 2,
                 "damage_dice_count": 1,
                 "damage_dice_sides": 6,
                 "bonus_dex": 1,
-                "bonus_damage": 1,
+                "bonus_damage": 0,
+            },
+
+            # HOZ OXIDADA (COMÚN)
+
+            {
+                "name": "Hoz Oxidada",
+                "description": "Una hoz con una hoja oxidada, seguramente robada de alguna granja.",
+                "item_type": "W1H",
+                "rarity": "COM",
+                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "ROG", "BRD"],
+                "cost_iota": 8,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 4,
+                "bonus_damage": 0,
+            },
+
+            # LÁTIGO DE CUERO (COMÚN)
+
+            {
+                "name": "Látigo de Cuero",
+                "description": "Un látigo hecho de cuero, adecuado para mantener la distancia.",
+                "item_type": "W1H",
+                "rarity": "COM",
+                "allowed_classes": ["CLR", "BBN", "FTR", "PAL", "ROG", "RGR"],
+                "cost_talento": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 4,
+                "bonus_damage": 0,
             },
 
 
