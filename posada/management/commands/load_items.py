@@ -426,12 +426,31 @@ class Command(BaseCommand):
                 "description": "Una espada corta hecha de hierro, adecuada para el combate cuerpo a cuerpo.",
                 "item_type": "W1H",
                 "rarity": "COM",
-                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "WIZ", "SOR", "WLK", "ROG", "BRD", "MNK"],
+                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "ROG", "BRD"],
                 "cost_real": 2,
                 "damage_dice_count": 1,
                 "damage_dice_sides": 6,
                 "bonus_damage": 0,
             },
+
+            # MAZA DE MADERA Y HIERRO (COMÚN)
+
+            {
+                "name": "Maza de Madera y Hierro",
+                "description": "Una maza hecha de madera y hierro, adecuada para el combate cuerpo a cuerpo.",
+                "item_type": "W1H",
+                "rarity": "COM",
+                "allowed_classes": ["CLR", "BBN", "ART", "DRD", "FTR", "PAL"],
+                "cost_real": 1,
+                "cost_iota": 5,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 6,
+                "bonus_damage": 0,
+            },
+
+
+
+
 
         ]
 
