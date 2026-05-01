@@ -492,6 +492,19 @@ class Command(BaseCommand):
                 "bonus_damage": 0,
             },
 
+            # BO DE MADERA (COMÚN)
+
+            {
+                "name": "Bō de Madera",
+                "description": "Un bastón de casi dos metros de longitud hecho de madera, adecuado para artes marciales.",
+                "item_type": "W2H",
+                "rarity": "COM",
+                "allowed_classes": ["MNK"],
+                "cost_marco": 1,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 6,
+                "bonus_damage": 1,
+            },
 
 
 
