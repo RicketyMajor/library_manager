@@ -576,6 +576,20 @@ class Command(BaseCommand):
                 "bonus_armor": 2,
             },
 
+            # VARITA DE APRENDIZ (COMÚN)
+            {
+                "name": "Varita de Aprendiz",
+                "description": "Una varita hecha de madera, adecuada para lanzar hechizos de nivel bajo.",
+                "item_type": "W1H",
+                "rarity": "COM",
+                "allowed_classes": ["WIZ", "SOR", "DRD", "WLK"],
+                "cost_talento": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 4,
+                "bonus_damage": 0,
+            },
+
+
 
 
 
