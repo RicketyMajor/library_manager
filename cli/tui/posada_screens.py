@@ -208,16 +208,21 @@ class CharacterCreationModal(ModalScreen[dict]):
 
 
 class AdventurerDetailsModal(ModalScreen[None]):
-    """Ficha de personaje con scroll y desglose total de riqueza."""
+    """Ficha de personaje con scroll, desglose de riqueza y tabla de equipo interactiva."""
 
     CSS = """
     #adv_details_dialog { width: 75; height: 35; padding: 1 2; border: double $primary; background: $surface; }
     .title_bar { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; }
     .stats_grid { grid-size: 2; grid-columns: 1fr 1fr; border: solid $accent; padding: 1; margin-bottom: 1; height: auto; }
     .wealth_grid { grid-size: 3; grid-columns: 1fr 1fr 1fr; border: solid $warning; padding: 1; margin-bottom: 1; height: auto; }
-    .inv_grid { grid-size: 2; grid-columns: 1fr 1fr; border: solid $success; padding: 1; height: auto; }
-    .section_title { color: $success; text-style: bold; margin-top: 1; }
-    #btn_close_details { width: 100%; margin-top: 1; }
+    .section_title { color: $success; text-style: bold; margin-top: 1; margin-bottom: 1; }
+    
+    /* El nuevo estilo para que la tabla de equipo se vea imponente */
+    #equipment_table { height: 14; border: solid $success; margin-bottom: 1; }
+    
+    .btn_row { height: 3; align: center middle; margin-top: 1; }
+    .btn_row Button { margin: 0 1; }
+    #btn_unequip { width: 100%; margin-bottom: 1; }
     """
 
     def __init__(self, adv_data: dict, **kwargs):
@@ -232,6 +237,7 @@ class AdventurerDetailsModal(ModalScreen[None]):
             # Usamos VerticalScroll para que quepa todo
             with VerticalScroll():
                 yield Label(f"❤️ HP: {a.get('hp')} | Nivel {a.get('level')} ({a.get('xp')} XP)")
+
                 # --- SECCIÓN DE ATRIBUTOS ---
                 yield Label("Atributos:", classes="section_title")
                 with Grid(classes="stats_grid"):
@@ -242,28 +248,19 @@ class AdventurerDetailsModal(ModalScreen[None]):
                     yield Label(f"Constitución: {a.get('con')}")
                     yield Label(f"Carisma: {a.get('cha')}")
                     yield Label(f"Suerte: {a.get('luk')}")
-                # --- SECCIÓN DE EQUIPO ---
-                yield Label("Equipo:", classes="section_title")
-                with Grid(classes="inv_grid"):
-                    yield Label(f"Mano Principal: {a.get('equip_main_hand')}")
-                    yield Label(f"Mano Secundaria: {a.get('equip_off_hand')}")
-                    yield Label(f"Cabeza: {a.get('equip_head')}")
-                    yield Label(f"Torso: {a.get('equip_torso')}")
-                    yield Label(f"Manos: {a.get('equip_hands')}")
-                    yield Label(f"Piernas: {a.get('equip_legs')}")
-                    yield Label(f"Pies: {a.get('equip_feet')}")
-                    yield Label(f"Collar: {a.get('equip_necklace')}")
-                    yield Label(f"Anillo 1: {a.get('equip_ring_1')}")
-                    yield Label(f"Anillo 2: {a.get('equip_ring_2')}")
-                    yield Label(f"Brazalete: {a.get('equip_bracelet')}")
-                    yield Label(f"Aretes: {a.get('equip_earring')}")
-                    yield Label("")
 
                 # --- SECCIÓN DE COMBATE ---
                 yield Label("Efectividad en Combate:", classes="section_title")
                 with Grid(classes="stats_grid"):
                     yield Label(f"⚔️ Daño Total: {a.get('combat_damage')}")
                     yield Label(f"🛡️ Armadura Total: {a.get('combat_armor')}")
+
+                # --- SECCIÓN DE EQUIPO (AHORA INTERACTIVA Y HERMOSA) ---
+                yield Label("Equipamiento Actual (Selecciona y Desequipa):", classes="section_title")
+                # cursor_type="row" hace que se ilumine toda la fila al navegar
+                yield DataTable(id="equipment_table", cursor_type="row")
+                yield Button("Desequipar Objeto Seleccionado", variant="warning", id="btn_unequip")
+
                 # --- SECCIÓN DE RIQUEZA ---
                 yield Label("Tesoro Personal:", classes="section_title")
                 w = a.get('wealth', {})
@@ -280,27 +277,68 @@ class AdventurerDetailsModal(ModalScreen[None]):
                     yield Label(f"P. Hierro: {w.get('iron_penny', 0)}")
                     yield Label(f"1/2 P. Hierro: {w.get('iron_half_penny', 0)}")
 
-            yield Button("Abrir Mochila", variant="success", id="btn_open_backpack")
-            yield Button("Cerrar Ficha", variant="primary", id="btn_close_details")
+            # --- BOTONES INFERIORES ---
+            with Horizontal(classes="btn_row"):
+                yield Button("Abrir Mochila", variant="success", id="btn_open_backpack")
+                yield Button("Cerrar Ficha", variant="primary", id="btn_close_details")
+
+    def on_mount(self):
+        table = self.query_one("#equipment_table", DataTable)
+        table.add_columns("Ranura", "Objeto Equipado")
+
+        # ¡Emojis restaurados para el inventario!
+        slots = [
+            ("Mano Principal", "equip_main_hand"), ("Mano Secundaria", "equip_off_hand"),
+            ("Cabeza", "equip_head"), ("Torso",
+                                       "equip_torso"), ("Manos", "equip_hands"),
+            ("Piernas", "equip_legs"), ("Pies",
+                                        "equip_feet"), ("Collar", "equip_necklace"),
+            ("Anillo 1", "equip_ring_1"), ("Anillo 2", "equip_ring_2"),
+            ("Brazalete", "equip_bracelet"), ("Aretes", "equip_earring")
+        ]
+        for name, key in slots:
+            item_name = self.adv_data.get(key, "Vacío")
+            table.add_row(name, item_name, key=key)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_close_details":
             self.dismiss(None)
         elif event.button.id == "btn_open_backpack":
-            # Lanza el Modal de Inventario sobre este modal
             self.app.push_screen(InventoryModal(
                 "adv", self.adv_data["id"], f"Mochila de {self.adv_data['name']}"))
+        elif event.button.id == "btn_unequip":
+            table = self.query_one("#equipment_table", DataTable)
+            try:
+                row_key = table.coordinate_to_cell_key(
+                    table.cursor_coordinate).row_key
+                self.request_unequip(row_key.value)
+            except Exception:
+                self.app.notify(
+                    "Selecciona un objeto para desequipar.", severity="warning")
+
+    @work(thread=True)
+    def request_unequip(self, slot_type: str):
+        resp = httpx.post(
+            f"{API_POSADA_BASE}adventurer/{self.adv_data['id']}/unequip/", json={"slot_type": slot_type})
+        if resp.status_code == 200:
+            self.app.call_from_thread(
+                self.app.notify, resp.json().get("message"), severity="success")
+            self.app.call_from_thread(self.dismiss, None)
+        else:
+            self.app.call_from_thread(
+                self.app.notify, resp.json().get("error"), severity="error")
+
 
 # --- MODAL DE GESTIÓN DE INVENTARIO ---
-
 
 class InventoryModal(ModalScreen[None]):
     """Visor de mochilas y cofre del gremio."""
 
     CSS = """
-    #inv_dialog { width: 80; height: 35; padding: 1 2; border: heavy $accent; background: $surface; }
+    #inv_dialog { width: 85; height: 35; padding: 1 2; border: heavy $accent; background: $surface; }
     .inv_title { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; width: 100%; }
-    .btn_row { height: 3; margin-top: 1; align: center middle; }
+    #inventory_table { height: 1fr; border: solid $success; margin-bottom: 1; }
+    .btn_row { height: 3; align: center middle; margin-top: 1; }
     .btn_row Button { margin: 0 1; }
     #select_adv { width: 30; margin-right: 1; }
     """
@@ -315,15 +353,16 @@ class InventoryModal(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="inv_dialog"):
             yield Label(self.modal_title, classes="inv_title")
-            yield DataTable(id="inventory_table")
+            yield DataTable(id="inventory_table", cursor_type="row")
 
             with Horizontal(classes="btn_row"):
                 if self.target_type == "adv":
-                    yield Button("Enviar Objeto al Cofre", id="btn_to_guild", variant="primary")
+                    # Textos corregidos para que se vean bien
+                    yield Button("Equipar", id="btn_equip", variant="success")
+                    yield Button("Enviar al Cofre", id="btn_to_guild", variant="primary")
                     yield Button("Vender Chatarra", id="btn_sell", variant="warning")
                 else:
                     yield Button("Vender Chatarra", id="btn_sell", variant="warning")
-                    # se llena de forma dinámica
                     yield Select([], id="select_adv")
                     yield Button("Dar a Aventurero", id="btn_to_adv", variant="success")
 
@@ -389,6 +428,8 @@ class InventoryModal(ModalScreen[None]):
             self.send_action("to_adv", slot_id, sel)
         elif event.button.id == "btn_sell":
             self.send_action("sell", slot_id)
+        elif event.button.id == "btn_equip":
+            self.send_action("equip", slot_id)
 
     @work(thread=True)
     def send_action(self, action, slot_id, adv_id=None):
@@ -396,8 +437,11 @@ class InventoryModal(ModalScreen[None]):
         resp = httpx.post(f"{API_POSADA_BASE}inventory/action/", json=payload)
         if resp.status_code == 200:
             self.app.call_from_thread(
-                self.app.notify, "Acción completada con éxito.", severity="success")
+                self.app.notify, resp.json().get("message"), severity="success")
             self.app.call_from_thread(self.fetch_inventory)
+        else:
+            self.app.call_from_thread(
+                self.app.notify, resp.json().get("error"), severity="error")
 
 # --- MODAL DE NUEVO HÁBITO ---
 

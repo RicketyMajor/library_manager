@@ -285,12 +285,53 @@ def get_item_score(item):
         item.bonus_int + item.bonus_wis + item.bonus_cha + item.bonus_luk
 
 
+def add_item_to_inventory(adv, item, event_log=None):
+    """Maneja la lógica de stacks de 16 y envío al cofre si la mochila está llena."""
+    guild, _ = GuildProfile.objects.get_or_create(id=1)
+    is_stackable = item.item_type in ['CNS', 'MSC']
+    color = ItemRarity.get_color(item.rarity)
+
+    if is_stackable:
+        # Busca un stack que aún no llegue a 16
+        slots = InventorySlot.objects.filter(
+            adventurer=adv, item=item, quantity__lt=16)
+        if slots.exists():
+            slot = slots.first()
+            slot.quantity += 1
+            slot.save()
+            if event_log is not None:
+                event_log.append(
+                    f"{adv.name} guardó [[{color}]{item.name}[/]] (x{slot.quantity}).")
+            return
+
+    # Si no es stackeable o no hay stacks con espacio, revisamos capacidad de slots
+    if adv.inventory.count() < adv.inventory_capacity:
+        add_item_to_inventory(adv, item, event_log)
+        if event_log is not None:
+            event_log.append(
+                f"{adv.name} guardó [[{color}]{item.name}[/]] en su mochila.")
+    else:
+        # Mochila llena, va al Gremio (infinito)
+        if event_log is not None:
+            event_log.append(
+                f"Mochila de {adv.name} llena. [[{color}]{item.name}[/]] se envió al Cofre del Gremio.")
+
+        if is_stackable:
+            g_slot, _ = InventorySlot.objects.get_or_create(
+                guild=guild, item=item, adventurer=None, defaults={'quantity': 0})
+            g_slot.quantity += 1
+            g_slot.save()
+        else:
+            InventorySlot.objects.create(
+                guild=guild, item=item, adventurer=None, quantity=1)
+
+
 def _auto_equip(adv, item, event_log, pull_type):
     """Evalúa si el objeto es mejor y guarda lo sobrante en la mochila."""
     color = ItemRarity.get_color(item.rarity)  # Color según la rareza
 
     if not is_class_allowed(adv, item):
-        InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+        add_item_to_inventory(adv, item, event_log)
         event_log.append(
             f"{adv.name} guardó [[{color}]{item.name}[/]] (Incompatible).")
         return
@@ -302,14 +343,14 @@ def _auto_equip(adv, item, event_log, pull_type):
             event_log.append(
                 f"{adv.name} bebió [[{color}]{item.name}[/]] y recuperó HP.")
         else:
-            InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+            add_item_to_inventory(adv, item, event_log)
             event_log.append(
                 f"{adv.name} guardó el objeto [[{color}]{item.name}[/]].")
         return
 
     # Misceláneos
     elif item.item_type == 'MSC':
-        InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+        add_item_to_inventory(adv, item, event_log)
         event_log.append(
             f"{adv.name} guardó el objeto de lujo [[{color}]{item.name}[/]].")
         return
@@ -330,13 +371,12 @@ def _auto_equip(adv, item, event_log, pull_type):
                 adv.equip_ring_2 = item
 
             if old_item:
-                InventorySlot.objects.create(
-                    adventurer=adv, item=old_item, quantity=1)
+                add_item_to_inventory(adv, old_item)
             event_log.append(
-                f"💍 {adv.name} se equipó [[{color}]{item.name}[/]].")
+                f"{adv.name} se equipó [[{color}]{item.name}[/]].")
             adv.save()
         else:
-            InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+            add_item_to_inventory(adv, item, event_log)
         return
 
     # el resto del equipo
@@ -356,24 +396,22 @@ def _auto_equip(adv, item, event_log, pull_type):
 
     # Bloqueo de Escudo si usa Mandoble
     if item.item_type == 'OFF' and getattr(adv, 'equip_main_hand') and getattr(adv, 'equip_main_hand').item_type == 'W2H':
-        InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+        add_item_to_inventory(adv, item, event_log)
         return
 
     if score_new > score_current:
         if current_item:
-            InventorySlot.objects.create(
-                adventurer=adv, item=current_item, quantity=1)
+            add_item_to_inventory(adv, current_item, event_log)
         setattr(adv, slot_name, item)
 
         if item.item_type == 'W2H' and adv.equip_off_hand:
-            InventorySlot.objects.create(
-                adventurer=adv, item=adv.equip_off_hand, quantity=1)
+            add_item_to_inventory(adv, adv.equip_off_hand)
             adv.equip_off_hand = None
 
         event_log.append(f"{adv.name} se equipó [[{color}]{item.name}[/]].")
         adv.save()
     else:
-        InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
+        add_item_to_inventory(adv, item, event_log)
 
 
 def evaluate_daily_penalties():
@@ -459,10 +497,7 @@ def process_session_completion(session_id, survived_seconds=None):
                 if adv:
                     try:
                         item_obj = Item.objects.get(id=event["item_id"])
-                        InventorySlot.objects.create(
-                            adventurer=adv, item=item_obj, quantity=1)
-                        event_log.append(
-                            f"{adv.name} guardó [{item_obj.name}] en su mochila.")
+                        add_item_to_inventory(adv, item_obj, event_log)
                     except Item.DoesNotExist:
                         pass
 

@@ -26,6 +26,9 @@ urlpatterns = [
          views.delete_chart, name='delete_chart'),
     path('api/habits/delete/<int:habit_id>/',
          views.delete_habit, name='delete_habit'),
-    path('api/habits/undo/', views.undo_habit, name='undo_habit'),
+    path('api/habits/undo/<int:habit_id>/',
+         views.undo_habit, name='undo_habit'),
     path('api/charts/claim/', views.claim_chart_reward, name='claim_chart_reward'),
+    path('api/adventurer/<int:adv_id>/unequip/',
+         views.unequip_item, name='unequip_item'),
 ]

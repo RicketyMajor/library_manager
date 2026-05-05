@@ -233,6 +233,10 @@ class Adventurer(WealthMixin):
     equip_off_hand = models.ForeignKey(
         Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_off')
 
+    # --- Límite de Mochila ---
+    inventory_capacity = models.PositiveIntegerField(
+        default=10, help_text="Máximo de slots en la mochila")
+
     level = models.PositiveIntegerField(default=1)
     experience = models.PositiveIntegerField(default=0)
 
