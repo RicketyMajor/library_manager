@@ -234,43 +234,22 @@ def generate_session_script(session_id, duration_minutes, adventurers_qs):
 
 
 def distribute_tithe(guild, adventurers_qs, loot_dict, event_log):
-    """
-    Divide el botín: 70% al Cofre del Gremio, 30% dividido entre los aventureros.
-    """
+    """El Gremio ya no cobra diezmo. El 100% del botín se divide entre los aventureros."""
     num_adventurers = adventurers_qs.count()
     if num_adventurers == 0:
-        for coin, amount in loot_dict.items():
-            setattr(guild, coin, getattr(guild, coin) + amount)
-        event_log.append("El Gremio ha reclamado el 100% del botín.")
         return
 
     event_log.append(
-        f"El Gremio retiene el 70% del botín. El 30% se divide entre {num_adventurers} aventureros.")
-
+        "Los aventureros retienen el 100% del botín de su expedición.")
     for coin, amount in loot_dict.items():
         if amount == 0:
             continue
-
-        guild_share = int(amount * 0.70)
-        adventurer_pool = amount - guild_share
-
-        # El gremio guarda su parte
-        setattr(guild, coin, getattr(guild, coin) + guild_share)
-
-        # Repartir el sobrante a los aventureros
-        if adventurer_pool > 0:
-            share_per_adv = adventurer_pool // num_adventurers
-            remainder = adventurer_pool % num_adventurers
-
-            for index, adv in enumerate(adventurers_qs):
-                # El resto se lo lleva el primer aventurero
-                extra = remainder if index == 0 else 0
-                setattr(adv, coin, getattr(adv, coin) + share_per_adv + extra)
-                adv.save()
-
-            # El Gremio se queda con el pico si nadie puede dividirlo bien
-            if share_per_adv == 0 and remainder > 0:
-                setattr(guild, coin, getattr(guild, coin) + remainder)
+        share_per_adv = amount // num_adventurers
+        remainder = amount % num_adventurers
+        for index, adv in enumerate(adventurers_qs):
+            extra = remainder if index == 0 else 0
+            setattr(adv, coin, getattr(adv, coin) + share_per_adv + extra)
+            adv.save()
 
 
 def _seed_items_if_empty():
@@ -398,12 +377,12 @@ def _auto_equip(adv, item, event_log, pull_type):
 
 
 def evaluate_daily_penalties():
-    """Evaluación Perezosa: Revisa hábitos omitidos respetando los días de descanso."""
+    """Resta prestigio al Gremio si se omiten hábitos válidos."""
     today = timezone.now().date()
     habits = DailyHabit.objects.all()
-    adventurers = Adventurer.objects.all()
+    guild, _ = GuildProfile.objects.get_or_create(id=1)
 
-    total_fatigue_added = 0
+    total_prestige_lost = 0
     penalty_log = []
 
     for habit in habits:
@@ -412,28 +391,26 @@ def evaluate_daily_penalties():
 
         if delta > 1:
             missed_valid_days = 0
-            # Revisa cada día que pasó desde la última vez
             for i in range(1, delta):
                 check_date = ref_date + timedelta(days=i)
-                # weekday() devuelve 0 para Lunes, 6 para Domingo
                 if str(check_date.weekday()) in habit.valid_days:
                     missed_valid_days += 1
 
             if missed_valid_days > 0:
-                total_fatigue_added += missed_valid_days
-                habit.current_streak = 0  # Rompe la racha
+                # Castigo: -15 de prestigio por cada día fallado
+                total_prestige_lost += (missed_valid_days * 15)
+                habit.current_streak = 0
                 penalty_log.append(
-                    f"Hábito roto: '{habit.name}' omitido por {missed_valid_days} día(s) válidos.")
+                    f"Hábito roto: '{habit.name}' (-{missed_valid_days*15} Prestigio).")
 
             habit.last_completed_date = today - timedelta(days=1)
             habit.save()
 
-    if total_fatigue_added > 0:
-        for adv in adventurers:
-            adv.fatigue_stacks += total_fatigue_added
-            adv.save()
+    if total_prestige_lost > 0:
+        guild.prestige -= total_prestige_lost
+        guild.save()
         penalty_log.append(
-            f"El Gremio recibe {total_fatigue_added} pila(s) de Fatiga.")
+            f"El Gremio pierde prestigio e influencia. (Total: -{total_prestige_lost})")
 
     return penalty_log
 
@@ -508,41 +485,25 @@ def process_session_completion(session_id, survived_seconds=None):
     distribute_tithe(guild, adventurers, loot, event_log)
     market_phase(adventurers, event_log)
 
-    # --- EXPERIENCIA Y SINERGIA ---
+    # --- EXPERIENCIA DE AVENTUREROS ---
     survived_minutes = survived_seconds // 60
     base_xp = survived_minutes * XP_PER_MINUTE
-    guild.experience += base_xp
-    check_guild_level_up(guild, event_log)
-    event_log.append(
-        f"El Gremio gana {base_xp} XP base por sobrevivir {survived_minutes} min.")
-
     cat_lower = session.category.lower()
 
     for adv in adventurers:
         multiplier = 1.0
-
-        # Evaluar Sinergia de Categoría
         for key, classes in CATEGORY_SYNERGY.items():
             if key in cat_lower and adv.adv_class in classes:
-                multiplier += 0.5  # +50% XP
+                multiplier += 0.5
                 event_log.append(
-                    f"Sinergia de Clase: {adv.name} domina esta tarea (+50% XP).")
+                    f"Sinergia: {adv.name} domina esta tarea (+50% XP).")
                 break
-
-        # Bonus de Sabiduría para aprender más rápido
         wis_bonus = sum(item.bonus_wis for item in adv.get_equipped_items())
         multiplier += (wis_bonus * 0.05)
 
-        adv_xp = int(base_xp * multiplier)
-        adv.experience += adv_xp
+        adv.experience += int(base_xp * multiplier)
         adv.save()
         check_level_up(adv, event_log)
-
-    # --- REGISTRO HISTÓRICO PARA LOS GRÁFICOS ---
-    today = timezone.now().date()
-    daily_stat, _ = DailyStatistic.objects.get_or_create(date=today)
-    daily_stat.deep_work_minutes += survived_minutes
-    daily_stat.save()
 
     guild.save()
     session.event_log = event_log
@@ -550,11 +511,8 @@ def process_session_completion(session_id, survived_seconds=None):
     session.save()
 
     return {
-        "status": "success",
-        "message": "Sesión completada y simulada.",
-        "loot": loot,
-        "base_xp": base_xp,
-        "log": event_log
+        "status": "success", "message": "Sesión completada y simulada.",
+        "loot": loot, "base_xp": base_xp, "log": event_log
     }
 
 # --- LÓGICA DE ESTADÍSTICAS Y NIVEL ---
@@ -589,18 +547,6 @@ def check_level_up(adv, event_log):
         # Llamada recursiva por si ganó muchísima XP de golpe
         check_level_up(adv, event_log)
 
-
-def check_guild_level_up(guild, event_log):
-    """Comprueba si el Gremio (Usuario) sube de nivel (cada 500 XP fijos)."""
-    leveled_up = False
-    while guild.experience >= 500:
-        guild.level += 1
-        guild.experience -= 500
-        leveled_up = True
-
-    if leveled_up:
-        event_log.append(
-            f"¡Ascenso! Tu Gremio sube al Nivel {guild.level}. Ahora puedes reclutar más aventureros.")
 # --- LÓGICA BANCARIA Y MERCADO ---
 
 
@@ -838,26 +784,23 @@ def calculate_chart_reward(chart):
         elif rendimiento <= 0.75:
             grade = 'B'
 
-    # Recompensas
+    # --- Recompensas de Gráfico ---
     guild, _ = GuildProfile.objects.get_or_create(id=1)
-    xp_reward = {'S': 800, 'A': 400, 'B': 150, 'C': 50}[grade]
+
+    # da prestigio masivo
+    prestige_reward = {'S': 200, 'A': 100, 'B': 50, 'C': 10}[grade]
     coin_reward = {'S': ('marco', 1), 'A': ('talento', 2), 'B': (
         'sueldo', 5), 'C': ('silver_penny', 10)}[grade]
 
-    guild.experience += xp_reward
+    guild.prestige += prestige_reward
     setattr(guild, coin_reward[0], getattr(
         guild, coin_reward[0]) + coin_reward[1])
     guild.save()
     universal_consolidate(guild)
 
-    for adv in Adventurer.objects.all():
-        adv.experience += xp_reward
-        adv.save()
-
-    # Reiniciar el gráfico
-    chart.data_points.all().delete()
+    chart.data_points.all().delete()  # Reinicia el gráfico
 
     return {
         "status": "success",
-        "message": f"¡Ciclo completado! Rango {grade} ({rendimiento*100:.1f}% del área). Ganaste {xp_reward} XP y {coin_reward[1]} {coin_reward[0].title()}."
+        "message": f"¡Ciclo completado! Rango {grade} ({rendimiento*100:.1f}% del área). Gremio gana +{prestige_reward} Prestigio y {coin_reward[1]} {coin_reward[0].title()}."
     }

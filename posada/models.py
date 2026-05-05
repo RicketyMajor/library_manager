@@ -239,8 +239,6 @@ class Adventurer(WealthMixin):
     is_active = models.BooleanField(default=False)
     is_recovering = models.BooleanField(default=False)
     recovery_time_left = models.PositiveIntegerField(default=0)
-    fatigue_stacks = models.PositiveIntegerField(
-        default=0, help_text="Cada stack resta -1 a todos los stats.")
 
     def __str__(self):
         return f"{self.name} - {self.get_adv_class_display()} (Nv. {self.level})"
@@ -305,29 +303,23 @@ class Adventurer(WealthMixin):
             mods['weapon_dice_count'] = self.equip_main_hand.damage_dice_count
             mods['weapon_dice_sides'] = self.equip_main_hand.damage_dice_sides
 
-        if self.fatigue_stacks > 0:
-            for stat in ['str', 'dex', 'con', 'int', 'wis', 'cha', 'luk']:
-                mods[stat] -= self.fatigue_stacks
-
         return mods
 
 
 class GuildProfile(WealthMixin):
-    level = models.PositiveIntegerField(default=1)
-    experience = models.PositiveIntegerField(default=0)
+    # --- NUEVO SISTEMA DE PRESTIGIO ---
+    prestige_level = models.PositiveIntegerField(default=1)
+    # Permite números negativos (Deuda de Honor)
+    prestige = models.IntegerField(default=0)
 
     @property
     def net_worth_in_talents(self):
-        """Calcula el valor neto aproximado de toda la bóveda expresado en Talentos."""
-        total = self.talento
-        total += self.marco * 10
-        total += self.real * 2.5
-        total += self.sueldo / 32.0
-        total += self.iota / 10.0
+        total = self.talento + (self.marco * 10) + (self.real * 2.5) + \
+            (self.sueldo / 32.0) + (self.iota / 10.0)
         return round(total, 2)
 
     def __str__(self):
-        return f"Gremio Nivel {self.level} - XP: {self.experience}"
+        return f"Gremio Nivel {self.prestige_level} - Prestigio: {self.prestige}"
 
 
 class DeepWorkSession(models.Model):
@@ -365,32 +357,21 @@ class HabitDifficulty(models.TextChoices):
 
 
 class DailyHabit(models.Model):
-    """Hábitos de la vida real que el usuario debe marcar."""
     name = models.CharField(max_length=100)
     difficulty = models.CharField(
         max_length=1, choices=HabitDifficulty.choices, default=HabitDifficulty.C)
-
-    # --- Frecuencia Personalizable ---
-    # Guarda un string con los números de los días válidos. Ej: "0,1,2,3,4" para Lunes a Viernes.
-    # Lunes=0, Martes=1, Miércoles=2, Jueves=3, Viernes=4, Sábado=5, Domingo=6
-    valid_days = models.CharField(max_length=20, default="0,1,2,3,4,5,6",
-                                  help_text="Días de la semana en los que aplica (0=Lun, 6=Dom)")
-
-    # Compara esto con la fecha de hoy para saber si ya se hizo o si hay deuda
+    valid_days = models.CharField(max_length=20, default="0,1,2,3,4,5,6")
     last_completed_date = models.DateField(null=True, blank=True)
     created_at = models.DateField(auto_now_add=True)
+    current_streak = models.PositiveIntegerField(default=0)
 
-    # --- Rachas y Undo ---
-    current_streak = models.PositiveIntegerField(
-        default=0, help_text="Días consecutivos cumpliendo el hábito")
-
-    # Guarda los valores de la última recompensa para poder restar exacto si el usuario presiona "Deshacer"
-    last_xp_reward = models.PositiveIntegerField(default=0)
+    # --- Guarda el prestigio exacto para el Undo ---
+    last_prestige_reward = models.PositiveIntegerField(default=0)
     last_coin_type = models.CharField(max_length=20, blank=True, null=True)
     last_coin_amount = models.PositiveIntegerField(default=0)
 
     def __str__(self):
-        return f"[{self.difficulty}] {self.name} (Racha: {self.current_streak})"
+        return f"[{self.difficulty}] {self.name}"
 
 
 class DailyStatistic(models.Model):

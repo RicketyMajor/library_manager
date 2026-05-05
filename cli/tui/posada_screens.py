@@ -665,7 +665,7 @@ class PosadaMainScreen(Screen):
                             yield Label("📜 Registro de Eventos")
                             yield Log(id="event_log", highlight=True)
 
-                with TabPane("El Gremio (Bóveda)", id="tab_guild"):
+                with TabPane("El Gremio", id="tab_guild"):
                     with Vertical(classes="guild_stats"):
                         yield Label("Cargando...", id="lbl_guild_level")
                         yield Label("Cargando bóveda...", id="lbl_guild_vault")
@@ -747,14 +747,21 @@ class PosadaMainScreen(Screen):
                 self.app.notify, "El Cambista no responde.", severity="error")
 
     def render_guild_status(self, data: dict) -> None:
-        """Actualiza los paneles del Gremio con los datos de Django."""
         guild = data.get("guild", {})
         adventurers = data.get("adventurers", [])
-
         self.adventurers_cache = adventurers
 
+        # --- MOSTRAR BARRA DE PRESTIGIO ---
+        lvl = guild.get('prestige_level', 1)
+        prest = guild.get('prestige', 0)
+        meta = guild.get('prestige_meta', 100)
+
+        # Color rojo si está en deuda, verde si está bien
+        color_p = "bold red" if prest < 0 else "bold green"
+
         self.query_one("#lbl_guild_level", Label).update(
-            f"Nivel del Maestro: {guild.get('level')} | XP: {guild.get('xp')}")
+            f"Nivel de Gremio: {lvl} | Prestigio: [{color_p}]{prest} / {meta}[/]"
+        )
 
         inv = guild.get("inventory", {})
         vault_text = (

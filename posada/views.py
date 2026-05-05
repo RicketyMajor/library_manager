@@ -78,13 +78,12 @@ def guild_status(request):
             "equip_ring_2": fmt_item_rich(adv.equip_ring_2),
             "equip_bracelet": fmt_item_rich(adv.equip_bracelet, "Ninguno"),
             "equip_earring": fmt_item_rich(adv.equip_earring, "Ninguno"),
-
-            "fatigue": adv.fatigue_stacks
         })
 
     guild_data = {
-        "level": guild.level,
-        "xp": guild.experience,
+        "prestige_level": guild.prestige_level,
+        "prestige": guild.prestige,
+        "prestige_meta": guild.prestige_level * 100,  # Nv1=100, Nv2=200, etc.
         "net_worth_talents": guild.net_worth_in_talents,
         "inventory": {
             "iron_half_penny": guild.iron_half_penny,
@@ -304,48 +303,43 @@ def complete_habit(request):
             return Response({"status": "warning", "message": "Ya cumpliste este hábito hoy."})
 
         guild, _ = GuildProfile.objects.get_or_create(id=1)
-        adventurers = Adventurer.objects.all()
 
-        # --- DEFINICIÓN DE RECOMPENSAS POR RANGO ---
+        # Recompensas de Gremio
         rewards = {
-            'S': {'xp': 100, 'coin': 'iota', 'amt': 1},
-            'A': {'xp': 50,  'coin': 'copper_penny', 'amt': 5},
-            'B': {'xp': 25,  'coin': 'copper_penny', 'amt': 2},
-            'C': {'xp': 10,  'coin': 'ardite', 'amt': 5},
+            'S': {'prestige': 50, 'coin': 'iota', 'amt': 1},
+            'A': {'prestige': 25, 'coin': 'copper_penny', 'amt': 5},
+            'B': {'prestige': 10, 'coin': 'copper_penny', 'amt': 2},
+            'C': {'prestige': 5,  'coin': 'ardite', 'amt': 5},
         }
         r = rewards.get(habit.difficulty)
 
-        # --- Guardar metadatos para el UNDO y racha ---
-        habit.last_xp_reward = r['xp']
+        habit.last_prestige_reward = r['prestige']
         habit.last_coin_type = r['coin']
         habit.last_coin_amount = r['amt']
         habit.current_streak += 1
 
-        # Otorga XP al Gremio y verifica si sube de nivel
-        old_level = guild.level
-        guild.experience += r['xp']
+        old_level = guild.prestige_level
+        guild.prestige += r['prestige']
         setattr(guild, r['coin'], getattr(guild, r['coin']) + r['amt'])
 
-        while guild.experience >= 500:
-            guild.level += 1
-            guild.experience -= 500
+        # Subida de Nivel del Gremio
+        while True:
+            # Nv1 pide 100, Nv2 pide 200, etc.
+            meta = guild.prestige_level * 100
+            if guild.prestige >= meta:
+                guild.prestige -= meta
+                guild.prestige_level += 1
+            else:
+                break
+
         guild.save()
-
-        lvl_msg = f" ¡Gremio Nv. {guild.level}!" if guild.level > old_level else ""
-
-        for adv in adventurers:
-            adv.experience += r['xp']
-            if adv.fatigue_stacks > 0:
-                adv.fatigue_stacks -= 1
-            adv.save()
-
         habit.last_completed_date = today
         habit.save()
 
-        lvl_msg = f" ¡Gremio Nv. {guild.level}!" if guild.level > old_level else ""
+        lvl_msg = f" ¡El Gremio ascendió al Nivel {guild.prestige_level}!" if guild.prestige_level > old_level else ""
         return Response({
             "status": "success",
-            "message": f"¡Hábito '{habit.name}' completado! (Racha: {habit.current_streak}). Fatiga reducida.{lvl_msg}"
+            "message": f"¡'{habit.name}' completado! +{r['prestige']} Prestigio.{lvl_msg}"
         })
     except DailyHabit.DoesNotExist:
         return Response({"status": "error", "message": "Hábito no encontrado."}, status=404)
@@ -547,27 +541,21 @@ def undo_habit(request):
     try:
         habit = DailyHabit.objects.get(id=habit_id)
         if habit.last_completed_date != today:
-            return Response({"status": "error", "message": "Solo puedes deshacer hábitos completados hoy."}, status=400)
+            return Response({"status": "error", "message": "Solo puedes deshacer hábitos de hoy."}, status=400)
 
         guild, _ = GuildProfile.objects.get_or_create(id=1)
-        # Revertir Gremio (no baja niveles, solo restamos la XP, truncando a 0 para no romper la DB)
-        guild.experience = max(0, guild.experience - habit.last_xp_reward)
+        guild.prestige -= habit.last_prestige_reward
         if habit.last_coin_type:
             curr_coin = getattr(guild, habit.last_coin_type)
             setattr(guild, habit.last_coin_type, max(
                 0, curr_coin - habit.last_coin_amount))
         guild.save()
 
-        # Revertir Aventureros (La XP no baja de 0 para no buguear el nivel)
-        for adv in Adventurer.objects.all():
-            adv.experience = max(0, adv.experience - habit.last_xp_reward)
-            adv.save()
-
         habit.current_streak = max(0, habit.current_streak - 1)
         habit.last_completed_date = today - timedelta(days=1)
         habit.save()
 
-        return Response({"status": "success", "message": f"Hábito '{habit.name}' revertido con éxito."})
+        return Response({"status": "success", "message": f"Hábito '{habit.name}' revertido."})
     except DailyHabit.DoesNotExist:
         return Response({"status": "error", "message": "Hábito no encontrado."}, status=404)
 
