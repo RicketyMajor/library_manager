@@ -443,6 +443,85 @@ class InventoryModal(ModalScreen[None]):
             self.app.call_from_thread(
                 self.app.notify, resp.json().get("error"), severity="error")
 
+
+class GuildUpgradesModal(ModalScreen[None]):
+    """Ventana para gastar las ganancias en mejoras de la base."""
+
+    CSS = """
+    #upgrades_dialog { width: 85; height: 35; padding: 1 2; border: heavy $warning; background: $surface; }
+    .modal_title { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; width: 100%; }
+    #upgrades_table { height: 1fr; border: solid $primary; margin-bottom: 1; }
+    .btn_row { height: 3; align: center middle; margin-top: 1; }
+    .btn_row Button { margin: 0 1; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="upgrades_dialog"):
+            yield Label("🔨 Mejoras de Infraestructura del Gremio", classes="modal_title")
+            yield DataTable(id="upgrades_table", cursor_type="row")
+            with Horizontal(classes="btn_row"):
+                yield Button("Comprar Seleccionada", id="btn_buy_upgrade", variant="success")
+                yield Button("Cerrar Tienda", id="btn_close_upgrades", variant="error")
+
+    def on_mount(self):
+        table = self.query_one("#upgrades_table", DataTable)
+        table.add_columns("Mejora", "Descripción",
+                          "Costo", "Req. Nivel", "Estado")
+        self.fetch_upgrades()
+
+    @work(thread=True)
+    def fetch_upgrades(self):
+        try:
+            resp = httpx.get(f"{API_POSADA_BASE}guild/upgrades/", timeout=5.0)
+            if resp.status_code == 200:
+                self.upgrades_cache = resp.json().get("upgrades", [])
+                self.app.call_from_thread(self.refresh_table)
+        except Exception:
+            pass
+
+    def refresh_table(self):
+        table = self.query_one("#upgrades_table", DataTable)
+        table.clear()
+        for u in getattr(self, 'upgrades_cache', []):
+            # Colorear estado visual
+            st = u['status']
+            color = "green" if st == "Adquirido" else (
+                "red" if st == "Bloqueado" else "yellow")
+            status_fmt = f"[bold {color}]{st}[/]"
+            cost_fmt = f"{u['cost_amount']} {u['cost_coin']}"
+
+            table.add_row(u['name'], u['description'], cost_fmt, str(
+                u['req_level']), status_fmt, key=u['key'])
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "btn_close_upgrades":
+            self.dismiss(None)
+        elif event.button.id == "btn_buy_upgrade":
+            table = self.query_one("#upgrades_table", DataTable)
+            try:
+                row_key = table.coordinate_to_cell_key(
+                    table.cursor_coordinate).row_key
+                self.request_purchase(row_key.value)
+            except Exception:
+                self.app.notify(
+                    "Selecciona una mejora primero.", severity="warning")
+
+    @work(thread=True)
+    def request_purchase(self, upgrade_key: str):
+        try:
+            resp = httpx.post(f"{API_POSADA_BASE}guild/upgrades/buy/",
+                              json={"key": upgrade_key}, timeout=5.0)
+            if resp.status_code == 200:
+                self.app.call_from_thread(
+                    self.app.notify, resp.json().get("message"), severity="success")
+                self.app.call_from_thread(self.fetch_upgrades)
+            else:
+                self.app.call_from_thread(
+                    self.app.notify, resp.json().get("error"), severity="error")
+        except Exception:
+            self.app.call_from_thread(
+                self.app.notify, "Fallo de conexión.", severity="error")
+
 # --- MODAL DE NUEVO HÁBITO ---
 
 
@@ -753,6 +832,7 @@ class PosadaMainScreen(Screen):
                         yield Label("Cargando...", id="lbl_guild_level")
                         yield Label("Cargando bóveda...", id="lbl_guild_vault")
                         yield Button("Consolidar Riqueza", id="btn_consolidate", classes="btn_consolidate", variant="warning")
+                        yield Button("Mejoras de Infraestructura", id="btn_open_upgrades", classes="btn_consolidate", variant="success")
                     yield Label("Todos los Aventureros Reclutados:")
                     yield DataTable(id="all_adventurers_table")
 
@@ -1039,6 +1119,10 @@ class PosadaMainScreen(Screen):
             self.action_next_journal_page()
         elif event.button.id == "btn_journal_write":
             self.action_write_journal()
+        elif event.button.id == "btn_open_upgrades":
+            # Abre el modal y al cerrarlo sincroniza la bóveda del Gremio
+            self.app.push_screen(GuildUpgradesModal(),
+                                 lambda _: self.sync_guild_status())
 
     def action_show_details(self) -> None:
         """Abre la ficha del personaje seleccionado en la tabla del Gremio."""

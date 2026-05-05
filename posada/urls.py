@@ -34,4 +34,6 @@ urlpatterns = [
     path('api/journal/', views.list_journal, name='list_journal'),
     path('api/journal/create/', views.create_journal_entry,
          name='create_journal_entry'),
+    path('api/guild/upgrades/', views.list_upgrades, name='list_upgrades'),
+    path('api/guild/upgrades/buy/', views.buy_upgrade, name='buy_upgrade'),
 ]

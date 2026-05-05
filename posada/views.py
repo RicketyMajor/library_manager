@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, InventorySlot, ItemRarity, CustomChart, ChartDataPoint, ChartPolarity, JournalEntry
+from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, InventorySlot, ItemRarity, CustomChart, ChartDataPoint, ChartPolarity, JournalEntry, Item, GuildUpgrade, GuildUnlockedUpgrade
 import random
 from .engine import process_session_completion, generate_session_script, consolidate_wealth, distribute_random_stats, evaluate_daily_penalties, universal_consolidate, calculate_chart_reward, is_class_allowed
 from django.utils import timezone
@@ -348,9 +348,27 @@ def complete_habit(request):
             habit.save()
 
             lvl_msg = f" ¡El Gremio ascendió al Nivel {guild.prestige_level}!" if guild.prestige_level > old_level else ""
-            return Response({"status": "success", "message": f"¡'{habit.name}' completado! +{r['prestige']} Prestigio.{lvl_msg}"})
+
+            # --- LÓGICA DEL TABLÓN PATROCINADO ---
+            drop_msg = ""
+            if habit.difficulty == 'S':
+                has_patroc = GuildUnlockedUpgrade.objects.filter(
+                    guild=guild, upgrade__key='tablon_patroc').exists()
+                if has_patroc and random.random() < 0.05:  # 5% de probabilidad
+                    pool = Item.objects.filter(rarity__in=['EPC', 'LEG'])
+                    if pool.exists():
+                        drop = random.choice(pool)
+                        g_slot, _ = InventorySlot.objects.get_or_create(
+                            guild=guild, item=drop, adventurer=None, defaults={'quantity': 0})
+                        g_slot.quantity += 1
+                        g_slot.save()
+                        color = ItemRarity.get_color(drop.rarity)
+                        drop_msg = f"\n¡El Tablón Patrocinado te envió [[{color}]{drop.name}[/]] al cofre!"
+
+            return Response({"status": "success", "message": f"¡'{habit.name}' completado! +{r['prestige']} Prestigio.{lvl_msg}{drop_msg}"})
+
     except DailyHabit.DoesNotExist:
-        return Response({"status": "error", "message": "Hábito no encontrado."}, status=404)
+        return Response({"status": "error", "message": "Hábito no encontrado."})
 
 
 @api_view(['GET'])
@@ -710,3 +728,62 @@ def create_journal_entry(request):
         "status": "success",
         "message": f"Pensamiento sellado en el Diario (+2 Prestigio).{lvl_msg}"
     })
+
+
+@api_view(['GET'])
+def list_upgrades(request):
+    """Devuelve el catálogo de mejoras cruzado con lo que el gremio ya compró."""
+    guild, _ = GuildProfile.objects.get_or_create(id=1)
+    upgrades = GuildUpgrade.objects.all().order_by('req_prestige_level')
+    unlocked_keys = set(GuildUnlockedUpgrade.objects.filter(
+        guild=guild).values_list('upgrade__key', flat=True))
+
+    data = []
+    for u in upgrades:
+        if u.key in unlocked_keys:
+            status_str = "Adquirido"
+        elif guild.prestige_level < u.req_prestige_level:
+            status_str = "Bloqueado"
+        else:
+            status_str = "Disponible"
+
+        data.append({
+            "key": u.key,
+            "name": u.name,
+            "description": u.description,
+            "cost_coin": u.cost_coin.title(),
+            "cost_amount": u.cost_amount,
+            "req_level": u.req_prestige_level,
+            "status": status_str
+        })
+    return Response({"upgrades": data})
+
+
+@api_view(['POST'])
+def buy_upgrade(request):
+    """Procesa la compra de una mejora de infraestructura."""
+    key = request.data.get('key')
+    guild, _ = GuildProfile.objects.get_or_create(id=1)
+
+    try:
+        upgrade = GuildUpgrade.objects.get(key=key)
+    except GuildUpgrade.DoesNotExist:
+        return Response({"error": "Mejora no encontrada."}, status=404)
+
+    if GuildUnlockedUpgrade.objects.filter(guild=guild, upgrade=upgrade).exists():
+        return Response({"error": "Ya posees esta mejora."}, status=400)
+
+    if guild.prestige_level < upgrade.req_prestige_level:
+        return Response({"error": f"Requiere Gremio Nivel {upgrade.req_prestige_level}."}, status=400)
+
+    curr_coins = getattr(guild, upgrade.cost_coin)
+    if curr_coins < upgrade.cost_amount:
+        return Response({"error": f"Fondos insuficientes. Cuesta {upgrade.cost_amount} {upgrade.cost_coin.title()}."}, status=400)
+
+    # Descuenta los fondos y registra la compra
+    setattr(guild, upgrade.cost_coin, curr_coins - upgrade.cost_amount)
+    guild.save()
+    universal_consolidate(guild)
+    GuildUnlockedUpgrade.objects.create(guild=guild, upgrade=upgrade)
+
+    return Response({"status": "success", "message": f"¡Mejora '{upgrade.name}' adquirida!"})

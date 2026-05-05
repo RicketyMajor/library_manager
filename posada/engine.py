@@ -895,7 +895,7 @@ def calculate_chart_reward(chart):
             grade = 'B'
     else:  # Gráficos Negativos
         if rendimiento <= 0.20:
-            grade = 'S'     # se llenó un 20% o menos (Excelente)
+            grade = 'S'     # se llenó un 20% o menos
         elif rendimiento <= 0.50:
             grade = 'A'
         elif rendimiento <= 0.75:
