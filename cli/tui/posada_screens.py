@@ -462,6 +462,8 @@ class NewHabitModal(ModalScreen[dict]):
             yield Input(value="0,1,2,3,4,5,6", id="habit_days")
             yield Label("Dificultad y Recompensa:")
             yield Select((("Rango S (Épico)", "S"), ("Rango A (Difícil)", "A"), ("Rango B (Medio)", "B"), ("Rango C (Fácil)", "C")), id="habit_diff", value="C")
+            yield Label("Tipo de Tarea:")
+            yield Select((("Buen Hábito", "GOOD"), ("Mal Hábito", "BAD")), id="habit_type", value="GOOD")
             with Horizontal(classes="btn_row"):
                 yield Button("Añadir", variant="success", id="btn_save_habit")
                 yield Button("Cancelar", variant="error", id="btn_cancel_habit")
@@ -473,9 +475,10 @@ class NewHabitModal(ModalScreen[dict]):
             name = self.query_one("#habit_name", Input).value
             diff = self.query_one("#habit_diff", Select).value
             days = self.query_one("#habit_days", Input).value
+            is_bad = self.query_one("#habit_type", Select).value == "BAD"
             if name:
-                self.dismiss(
-                    {"name": name, "difficulty": diff, "valid_days": days})
+                self.dismiss({"name": name, "difficulty": diff,
+                             "valid_days": days, "is_bad_habit": is_bad})
             else:
                 self.app.notify(
                     "El hábito necesita un nombre.", severity="error")
@@ -1421,14 +1424,16 @@ class PosadaMainScreen(Screen):
         table = self.query_one("#missions_table", DataTable)
         table.clear()
         for h in habits:
-            # Usa Rich para darle color a la palabra Completado
-            status = "[bold green]Completado[/]" if h["completed_today"] else "[gray]Pendiente[/]"
+            if h.get("is_bad_habit"):
+                status = "[bold red]Recaída[/]" if h["completed_today"] else "[bold green]Evitado[/]"
+                estado_visual = f"🛡️ Resistencia: {h.get('current_streak', 0)} | {status}"
+                name_fmt = f"[red](Evitar)[/] {h['name']}"
+            else:
+                status = "[bold green]Completado[/]" if h["completed_today"] else "[gray]Pendiente[/]"
+                estado_visual = f"🔥 Racha: {h.get('current_streak', 0)} | {status}"
+                name_fmt = h['name']
 
-            # Construye el texto visual combinando la racha y el estado
-            racha = h.get("current_streak", 0)
-            estado_visual = f"🔥 Racha: {racha} | {status}"
-
-            table.add_row(h["name"], h["difficulty"],
+            table.add_row(name_fmt, h["difficulty"],
                           estado_visual, key=str(h["id"]))
 
     def action_add_habit(self) -> None:

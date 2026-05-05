@@ -267,11 +267,10 @@ def list_habits(request):
     habit_list = []
     for h in habits:
         habit_list.append({
-            "id": h.id,
-            "name": h.name,
-            "difficulty": h.get_difficulty_display(),
+            "id": h.id, "name": h.name, "difficulty": h.get_difficulty_display(),
             "completed_today": h.last_completed_date == today,
-            "current_streak": h.current_streak
+            "current_streak": h.current_streak,
+            "is_bad_habit": h.is_bad_habit
         })
 
     return Response({
@@ -284,10 +283,9 @@ def list_habits(request):
 def create_habit(request):
     data = request.data
     habit = DailyHabit.objects.create(
-        name=data.get('name'),
-        difficulty=data.get('difficulty', 'C'),
-        # Guarda los días
-        valid_days=data.get('valid_days', '0,1,2,3,4,5,6')
+        name=data.get('name'), difficulty=data.get('difficulty', 'C'),
+        valid_days=data.get('valid_days', '0,1,2,3,4,5,6'),
+        is_bad_habit=data.get('is_bad_habit', False)
     )
     return Response({"status": "success", "message": f"Hábito '{habit.name}' añadido."})
 
@@ -300,11 +298,9 @@ def complete_habit(request):
     try:
         habit = DailyHabit.objects.get(id=habit_id)
         if habit.last_completed_date == today:
-            return Response({"status": "warning", "message": "Ya cumpliste este hábito hoy."})
+            return Response({"status": "warning", "message": "Ya interactuaste con este hábito hoy."})
 
         guild, _ = GuildProfile.objects.get_or_create(id=1)
-
-        # Recompensas de Gremio
         rewards = {
             'S': {'prestige': 50, 'coin': 'iota', 'amt': 1},
             'A': {'prestige': 25, 'coin': 'copper_penny', 'amt': 5},
@@ -313,34 +309,46 @@ def complete_habit(request):
         }
         r = rewards.get(habit.difficulty)
 
-        habit.last_prestige_reward = r['prestige']
-        habit.last_coin_type = r['coin']
-        habit.last_coin_amount = r['amt']
-        habit.current_streak += 1
+        if habit.is_bad_habit:
+            # LÓGICA DE RECAÍDA
+            prestige_penalty = r['prestige'] * \
+                2  # Penalización doble por recaer
+            habit.last_prestige_reward = prestige_penalty
+            habit.previous_streak = habit.current_streak
 
-        old_level = guild.prestige_level
-        guild.prestige += r['prestige']
-        setattr(guild, r['coin'], getattr(guild, r['coin']) + r['amt'])
+            guild.prestige -= prestige_penalty
+            habit.current_streak = 0
+            habit.last_completed_date = today
+            guild.save()
+            habit.save()
+            return Response({"status": "error", "message": f"¡Recaída en '{habit.name}'! Perdiste {prestige_penalty} Prestigio."})
 
-        # Subida de Nivel del Gremio
-        while True:
-            # Nv1 pide 100, Nv2 pide 200, etc.
-            meta = guild.prestige_level * 100
-            if guild.prestige >= meta:
-                guild.prestige -= meta
-                guild.prestige_level += 1
-            else:
-                break
+        else:
+            # LÓGICA DE BUEN HÁBITO
+            habit.last_prestige_reward = r['prestige']
+            habit.last_coin_type = r['coin']
+            habit.last_coin_amount = r['amt']
+            habit.previous_streak = habit.current_streak
+            habit.current_streak += 1
 
-        guild.save()
-        habit.last_completed_date = today
-        habit.save()
+            old_level = guild.prestige_level
+            guild.prestige += r['prestige']
+            setattr(guild, r['coin'], getattr(guild, r['coin']) + r['amt'])
 
-        lvl_msg = f" ¡El Gremio ascendió al Nivel {guild.prestige_level}!" if guild.prestige_level > old_level else ""
-        return Response({
-            "status": "success",
-            "message": f"¡'{habit.name}' completado! +{r['prestige']} Prestigio.{lvl_msg}"
-        })
+            while True:
+                meta = guild.prestige_level * 100
+                if guild.prestige >= meta:
+                    guild.prestige -= meta
+                    guild.prestige_level += 1
+                else:
+                    break
+
+            guild.save()
+            habit.last_completed_date = today
+            habit.save()
+
+            lvl_msg = f" ¡El Gremio ascendió al Nivel {guild.prestige_level}!" if guild.prestige_level > old_level else ""
+            return Response({"status": "success", "message": f"¡'{habit.name}' completado! +{r['prestige']} Prestigio.{lvl_msg}"})
     except DailyHabit.DoesNotExist:
         return Response({"status": "error", "message": "Hábito no encontrado."}, status=404)
 
@@ -594,21 +602,27 @@ def undo_habit(request):
     try:
         habit = DailyHabit.objects.get(id=habit_id)
         if habit.last_completed_date != today:
-            return Response({"status": "error", "message": "Solo puedes deshacer hábitos de hoy."}, status=400)
+            return Response({"status": "error", "message": "Solo puedes deshacer acciones de hoy."}, status=400)
 
         guild, _ = GuildProfile.objects.get_or_create(id=1)
-        guild.prestige -= habit.last_prestige_reward
-        if habit.last_coin_type:
-            curr_coin = getattr(guild, habit.last_coin_type)
-            setattr(guild, habit.last_coin_type, max(
-                0, curr_coin - habit.last_coin_amount))
-        guild.save()
 
-        habit.current_streak = max(0, habit.current_streak - 1)
+        if habit.is_bad_habit:
+            # Devuelve el prestigio restado por error
+            guild.prestige += habit.last_prestige_reward
+        else:
+            # Quita el prestigio y monedas ganadas por error
+            guild.prestige -= habit.last_prestige_reward
+            if habit.last_coin_type:
+                curr_coin = getattr(guild, habit.last_coin_type)
+                setattr(guild, habit.last_coin_type, max(
+                    0, curr_coin - habit.last_coin_amount))
+
+        guild.save()
+        habit.current_streak = habit.previous_streak
         habit.last_completed_date = today - timedelta(days=1)
         habit.save()
 
-        return Response({"status": "success", "message": f"Hábito '{habit.name}' revertido."})
+        return Response({"status": "success", "message": f"Acción en '{habit.name}' revertida."})
     except DailyHabit.DoesNotExist:
         return Response({"status": "error", "message": "Hábito no encontrado."}, status=404)
 

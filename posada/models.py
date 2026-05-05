@@ -258,10 +258,9 @@ class Adventurer(WealthMixin):
         ] if i is not None]
 
     def get_stat_modifiers(self):
-        """Calcula los bonos genéticos (Raza/Clase) y del equipamiento."""
-        # Añadimos los dados por defecto (Desarmado: 1d4)
+        # Cambiamos: Daño base 2, desarmado
         mods = {'str': 0, 'dex': 0, 'con': 0, 'int': 0, 'wis': 0, 'cha': 0, 'luk': 0,
-                'armor': 0, 'damage': 0, 'weapon_dice_count': 1, 'weapon_dice_sides': 4}
+                'armor': 0, 'damage': 2, 'weapon_dice_count': 0, 'weapon_dice_sides': 0}
 
         # Modificadores de Raza
         race_mods = {
@@ -302,10 +301,11 @@ class Adventurer(WealthMixin):
             mods['armor'] += item.bonus_armor
             mods['damage'] += item.bonus_damage
 
-        # Lee el dado del arma principal (si tiene una)
+        # Si usa arma, quita el daño base desarmado y usa los dados del arma
         if self.equip_main_hand and self.equip_main_hand.damage_dice_count > 0:
             mods['weapon_dice_count'] = self.equip_main_hand.damage_dice_count
             mods['weapon_dice_sides'] = self.equip_main_hand.damage_dice_sides
+            mods['damage'] -= 2
 
         return mods
 
@@ -365,11 +365,18 @@ class DailyHabit(models.Model):
     difficulty = models.CharField(
         max_length=1, choices=HabitDifficulty.choices, default=HabitDifficulty.C)
     valid_days = models.CharField(max_length=20, default="0,1,2,3,4,5,6")
+
+    # --- Hábito Inverso ---
+    is_bad_habit = models.BooleanField(
+        default=False, help_text="Si es True, marcarlo es una recaída (castigo).")
+
     last_completed_date = models.DateField(null=True, blank=True)
     created_at = models.DateField(auto_now_add=True)
     current_streak = models.PositiveIntegerField(default=0)
 
-    # --- Guarda el prestigio exacto para el Undo ---
+    # --- Undo Cache ---
+    # Para recuperar la racha al deshacer recaídas
+    previous_streak = models.PositiveIntegerField(default=0)
     last_prestige_reward = models.PositiveIntegerField(default=0)
     last_coin_type = models.CharField(max_length=20, blank=True, null=True)
     last_coin_amount = models.PositiveIntegerField(default=0)

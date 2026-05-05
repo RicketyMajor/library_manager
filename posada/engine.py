@@ -415,12 +415,12 @@ def _auto_equip(adv, item, event_log, pull_type):
 
 
 def evaluate_daily_penalties():
-    """Resta prestigio al Gremio si se omiten hábitos válidos."""
+    """Resta prestigio por pereza o PREMIA por evitar malos hábitos."""
     today = timezone.now().date()
     habits = DailyHabit.objects.all()
     guild, _ = GuildProfile.objects.get_or_create(id=1)
 
-    total_prestige_lost = 0
+    total_prestige_change = 0
     penalty_log = []
 
     for habit in habits:
@@ -435,20 +435,42 @@ def evaluate_daily_penalties():
                     missed_valid_days += 1
 
             if missed_valid_days > 0:
-                # Castigo: -15 de prestigio por cada día fallado
-                total_prestige_lost += (missed_valid_days * 15)
-                habit.current_streak = 0
-                penalty_log.append(
-                    f"Hábito roto: '{habit.name}' (-{missed_valid_days*15} Prestigio).")
+                if habit.is_bad_habit:
+                    # ¡Resististe la tentación!
+                    reward_map = {'S': 50, 'A': 25, 'B': 10, 'C': 5}
+                    prestige_gain = reward_map.get(
+                        habit.difficulty, 5) * missed_valid_days
+                    total_prestige_change += prestige_gain
+                    habit.current_streak += missed_valid_days
+                    penalty_log.append(
+                        f"Evitaste '{habit.name}' por {missed_valid_days} día(s) (+{prestige_gain} Prestigio).")
+                else:
+                    # CASTIGO: Pereza en un buen hábito
+                    prestige_loss = missed_valid_days * 15
+                    total_prestige_change -= prestige_loss
+                    habit.current_streak = 0
+                    penalty_log.append(
+                        f"Hábito roto: '{habit.name}' (-{prestige_loss} Prestigio).")
 
             habit.last_completed_date = today - timedelta(days=1)
             habit.save()
 
-    if total_prestige_lost > 0:
-        guild.prestige -= total_prestige_lost
+    if total_prestige_change != 0:
+        guild.prestige += total_prestige_change
+
+        # Verifica si las resistencias silenciosas suben de nivel al gremio
+        while True:
+            meta = guild.prestige_level * 100
+            if guild.prestige >= meta:
+                guild.prestige -= meta
+                guild.prestige_level += 1
+            else:
+                break
+
         guild.save()
-        penalty_log.append(
-            f"El Gremio pierde prestigio e influencia. (Total: -{total_prestige_lost})")
+        if total_prestige_change < 0:
+            penalty_log.append(
+                f"El Gremio pierde influencia. (Impacto Neto: {total_prestige_change})")
 
     return penalty_log
 
