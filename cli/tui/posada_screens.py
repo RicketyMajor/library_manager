@@ -763,6 +763,9 @@ class PosadaMainScreen(Screen):
         self.query_one("#tab_controls", Label).update(
             "Sala de Enfoque -> [c] Configurar Expedición  |  [p] Pausar / Seguir  |  [s] Detener / Huir")
 
+        self.title = "BUNKER"
+        self.sub_title = "Módulo de la Posada"
+
     # --- LLAMADAS A LA API ---
     @work(thread=True)
     def sync_guild_status(self) -> None:
