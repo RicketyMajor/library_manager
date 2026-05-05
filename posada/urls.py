@@ -31,4 +31,7 @@ urlpatterns = [
     path('api/charts/claim/', views.claim_chart_reward, name='claim_chart_reward'),
     path('api/adventurer/<int:adv_id>/unequip/',
          views.unequip_item, name='unequip_item'),
+    path('api/journal/', views.list_journal, name='list_journal'),
+    path('api/journal/create/', views.create_journal_entry,
+         name='create_journal_entry'),
 ]

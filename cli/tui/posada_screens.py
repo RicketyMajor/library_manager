@@ -1,6 +1,6 @@
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.widgets import Header, Footer, Button, Label, TabbedContent, TabPane, DataTable, Log, Input, RadioSet, RadioButton, SelectionList, Select
+from textual.widgets import Header, Footer, Button, Label, TabbedContent, TabPane, DataTable, Log, Input, RadioSet, RadioButton, SelectionList, Select, TextArea
 from textual.containers import Vertical, Horizontal, Grid, VerticalScroll
 from textual.reactive import reactive
 from textual.binding import Binding
@@ -570,6 +570,33 @@ class AddChartDataModal(ModalScreen[dict]):
                     "Ambos valores deben ser numéricos (Ej: 2.5).", severity="error")
 
 
+class WriteJournalModal(ModalScreen[str]):
+    CSS = """
+    #write_journal_dialog { width: 70; height: 25; padding: 1 2; border: solid $accent; background: $surface; }
+    .modal_title { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; width: 100%; }
+    #journal_textarea { height: 1fr; margin-bottom: 1; border: round $success;}
+    .btn_row { height: 3; align: center middle; }
+    .btn_row Button { margin: 0 1; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="write_journal_dialog"):
+            yield Label("✒️ Nuevo Pensamiento", classes="modal_title")
+            yield TextArea(id="journal_textarea")
+            with Horizontal(classes="btn_row"):
+                yield Button("Sellar Página", variant="success", id="btn_save_journal")
+                yield Button("Descartar", variant="error", id="btn_cancel_journal")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_cancel_journal":
+            self.dismiss(None)
+        elif event.button.id == "btn_save_journal":
+            text = self.query_one("#journal_textarea", TextArea).text
+            if text.strip():
+                self.dismiss(text)
+            else:
+                self.app.notify("La página está en blanco.", severity="error")
+
 # --- PESTAÑAS ---
 
 
@@ -620,6 +647,7 @@ class PosadaMainScreen(Screen):
         ("2", "switch_tab('tab_guild')", "Gremio"),
         ("3", "switch_tab('tab_tavern')", "Taberna"),
         ("4", "switch_tab('tab_missions')", "Misiones"),
+        ("5", "switch_tab('tab_journal')", "Diario"),
 
         # Controles Ocultos
         Binding("c", "setup_timer", "Configurar", show=False),
@@ -641,6 +669,7 @@ class PosadaMainScreen(Screen):
         Binding("u", "undo_habit", "Deshacer Hábito", show=False),
         Binding("R", "claim_chart", "Reclamar Gráfico",
                 show=False),
+        Binding("w", "write_journal", "Escribir Diario", show=False),
 
     ]
 
@@ -679,7 +708,14 @@ class PosadaMainScreen(Screen):
         color: $error;
         text-style: bold;
     }
-
+    
+    #journal_book { height: 1fr; border: double #8b5a2b; background: #1a110b; margin-bottom: 1; }
+    .journal_page { width: 50%; height: 100%; padding: 1 3; }
+    .page_left { border-right: dashed #5c3a21; }
+    .page_date { text-style: italic; color: #d4af37; margin-bottom: 1; border-bottom: solid #5c3a21; width: 100%; text-align: center; }
+    .page_content { height: 1fr; color: #e6d8ad; }
+    #journal_controls { height: 3; align: center middle; }
+    #journal_controls Button { margin: 0 2; }
     
     """
 
@@ -738,6 +774,18 @@ class PosadaMainScreen(Screen):
                         with Vertical(id="stats_col", classes="half_width"):
                             yield Label("Cargando gráficos...", id="chart_title_label", classes="section_title")
                             yield PlotextPlot(id="productivity_plot")
+                with TabPane("Diario de Viaje", id="tab_journal"):
+                    with Horizontal(id="journal_book"):
+                        with Vertical(classes="journal_page page_left"):
+                            yield Label("", id="page_left_date", classes="page_date")
+                            yield Label("", id="page_left_content", classes="page_content")
+                        with Vertical(classes="journal_page"):
+                            yield Label("", id="page_right_date", classes="page_date")
+                            yield Label("", id="page_right_content", classes="page_content")
+                    with Horizontal(id="journal_controls"):
+                        yield Button("◀ Anterior", id="btn_journal_prev", variant="primary")
+                        yield Button("✒️ Escribir (w)", id="btn_journal_write", variant="success")
+                        yield Button("Siguiente ▶", id="btn_journal_next", variant="primary")
         yield Label("", id="tab_controls")
         yield Footer()
 
@@ -761,6 +809,7 @@ class PosadaMainScreen(Screen):
         # Sincroniza la interfaz con la base de datos
         self.sync_guild_status()
         self.fetch_missions_data()
+        self.fetch_journal()
         self.set_timer_ui_state("idle")
         self.query_one("#tab_timer").focus()
         self.query_one("#tab_controls", Label).update(
@@ -984,6 +1033,12 @@ class PosadaMainScreen(Screen):
             self.action_recruit()
         elif event.button.id == "btn_refresh_tavern":
             self.action_refresh_tavern()
+        elif event.button.id == "btn_journal_prev":
+            self.action_prev_journal_page()
+        elif event.button.id == "btn_journal_next":
+            self.action_next_journal_page()
+        elif event.button.id == "btn_journal_write":
+            self.action_write_journal()
 
     def action_show_details(self) -> None:
         """Abre la ficha del personaje seleccionado en la tabla del Gremio."""
@@ -1019,6 +1074,9 @@ class PosadaMainScreen(Screen):
         elif pane_id == "tab_missions":
             lbl.update(
                 "Misiones -> [m] Marcar | [u] Deshacer | [-] Borrar | [<][>] Carrusel | [a] Coordenada | [R] Reclamar")
+        elif pane_id == "tab_journal":
+            lbl.update(
+                "Diario de Viaje -> [w] Escribir Pensamiento  |  [◀] Página Anterior  |  [▶] Página Siguiente")
 
     def action_switch_tab(self, tab_id: str) -> None:
         """Permite navegar súper rápido entre pestañas presionando 1, 2, 3 o 4."""
@@ -1548,3 +1606,92 @@ class PosadaMainScreen(Screen):
                 self.app.notify(resp.json().get("message"), severity="warning")
         except Exception:
             pass
+
+    # --- DIARIO DE VIAJE ---
+    @work(thread=True)
+    def fetch_journal(self):
+        try:
+            resp = httpx.get(f"{API_POSADA_BASE}journal/", timeout=5.0)
+            if resp.status_code == 200:
+                self.journal_entries = resp.json().get("entries", [])
+                self.app.call_from_thread(self.render_journal_init)
+        except Exception:
+            pass
+
+    def render_journal_init(self):
+        if not hasattr(self, 'journal_entries'):
+            return
+        total_pages = (len(self.journal_entries) + 1) // 2
+        if total_pages == 0:
+            total_pages = 1
+        # Ir a la última página automáticamente
+        self.current_journal_page = total_pages - 1
+        self.render_journal()
+
+    def render_journal(self):
+        if not hasattr(self, 'journal_entries'):
+            return
+        entries = self.journal_entries
+        idx = getattr(self, 'current_journal_page', 0) * 2
+
+        # Página Izquierda
+        if idx < len(entries):
+            self.query_one("#page_left_date", Label).update(
+                entries[idx]['timestamp'])
+            self.query_one("#page_left_content", Label).update(
+                entries[idx]['content'])
+        else:
+            self.query_one("#page_left_date", Label).update("Página en blanco")
+            self.query_one("#page_left_content", Label).update(
+                "El futuro aún no está escrito...")
+
+        # Página Derecha
+        if idx + 1 < len(entries):
+            self.query_one("#page_right_date", Label).update(
+                entries[idx+1]['timestamp'])
+            self.query_one("#page_right_content", Label).update(
+                entries[idx+1]['content'])
+        else:
+            self.query_one("#page_right_date", Label).update(
+                "Página en blanco")
+            self.query_one("#page_right_content", Label).update(
+                "El futuro aún no está escrito...")
+
+    def action_prev_journal_page(self):
+        if self.query_one(TabbedContent).active != "tab_journal":
+            return
+        if getattr(self, 'current_journal_page', 0) > 0:
+            self.current_journal_page -= 1
+            self.render_journal()
+
+    def action_next_journal_page(self):
+        if self.query_one(TabbedContent).active != "tab_journal":
+            return
+        entries = getattr(self, 'journal_entries', [])
+        total_pages = (len(entries) + 1) // 2
+        if total_pages == 0:
+            total_pages = 1
+        if getattr(self, 'current_journal_page', 0) < total_pages - 1:
+            self.current_journal_page += 1
+            self.render_journal()
+
+    def action_write_journal(self):
+        if self.query_one(TabbedContent).active != "tab_journal":
+            return
+        self.app.push_screen(WriteJournalModal(), self.submit_journal_entry)
+
+    @work(thread=True)
+    def submit_journal_entry(self, text: str | None):
+        if not text:
+            return
+        try:
+            resp = httpx.post(f"{API_POSADA_BASE}journal/create/",
+                              json={"content": text}, timeout=5.0)
+            if resp.status_code == 200:
+                self.app.call_from_thread(
+                    self.app.notify, resp.json().get("message"), severity="success")
+                self.app.call_from_thread(self.fetch_journal)
+                self.app.call_from_thread(self.sync_guild_status)
+        except Exception:
+            self.app.call_from_thread(
+                self.app.notify, "El Gremio no responde.", severity="error")

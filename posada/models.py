@@ -483,3 +483,16 @@ class ChartDataPoint(models.Model):
 
     def __str__(self):
         return f"{self.chart.title}: X={self.x_value}, Y={self.y_value}"
+
+
+class JournalEntry(models.Model):
+    """Registros del Diario de Viaje con timestamps automáticos."""
+    content = models.TextField(
+        help_text="Pensamiento o registro del aventurero")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Entrada del {self.created_at.strftime('%Y-%m-%d %H:%M')}"

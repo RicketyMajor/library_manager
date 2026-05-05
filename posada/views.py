@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, InventorySlot, ItemRarity, CustomChart, ChartDataPoint, ChartPolarity
+from .models import GuildProfile, Adventurer, DeepWorkSession, AdventurerClass, AdventurerRace, AdventurerGender, DailyHabit, DailyStatistic, HabitDifficulty, InventorySlot, ItemRarity, CustomChart, ChartDataPoint, ChartPolarity, JournalEntry
 import random
 from .engine import process_session_completion, generate_session_script, consolidate_wealth, distribute_random_stats, evaluate_daily_penalties, universal_consolidate, calculate_chart_reward, is_class_allowed
 from django.utils import timezone
@@ -659,3 +659,54 @@ def unequip_item(request, adv_id):
         return Response({"status": "success", "message": f"{item.name} desequipado."})
     except Exception as e:
         return Response({"error": str(e)}, status=400)
+
+
+@api_view(['GET'])
+def list_journal(request):
+    """Obtiene todas las entradas del diario ordenadas cronológicamente."""
+    entries = JournalEntry.objects.all().order_by('created_at')
+    data = []
+
+    for e in entries:
+        # Convierte a la zona horaria local
+        local_dt = timezone.localtime(e.created_at)
+        timestamp = local_dt.strftime('%d/%m/%Y - %H:%M hrs')
+        data.append({
+            "id": e.id,
+            "content": e.content,
+            "timestamp": timestamp
+        })
+    return Response({"entries": data})
+
+
+@api_view(['POST'])
+def create_journal_entry(request):
+    """Guarda una nueva página y otorga un buff al Gremio."""
+    content = request.data.get('content')
+    if not content:
+        return Response({"error": "La página no puede estar vacía."}, status=400)
+
+    # --- Buff de Claridad Mental ---
+    guild, _ = GuildProfile.objects.get_or_create(id=1)
+    guild.prestige += 2
+
+    # Verifica si la claridad mental subió de nivel al gremio
+    lvl_msg = ""
+    old_level = guild.prestige_level
+    while True:
+        meta = guild.prestige_level * 100
+        if guild.prestige >= meta:
+            guild.prestige -= meta
+            guild.prestige_level += 1
+        else:
+            break
+
+    guild.save()
+    if guild.prestige_level > old_level:
+        lvl_msg = f" ¡El Gremio ascendió al Nivel {guild.prestige_level}!"
+
+    JournalEntry.objects.create(content=content)
+    return Response({
+        "status": "success",
+        "message": f"Pensamiento sellado en el Diario (+2 Prestigio).{lvl_msg}"
+    })
