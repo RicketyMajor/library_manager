@@ -412,7 +412,7 @@ class Command(BaseCommand):
                 "description": "Una daga hecha de hierro, ligera para el combate cuerpo a cuerpo.",
                 "item_type": "W1H",
                 "rarity": "COM",
-                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "WIZ", "SOR", "WLK", "ROG", "BRD"],
+                "allowed_classes": ["RGR", "BBN", "FTR", "PAL", "ROG", "BRD"],
                 "cost_talento": 1,
                 "damage_dice_count": 1,
                 "damage_dice_sides": 4,
@@ -426,7 +426,7 @@ class Command(BaseCommand):
                 "description": "Una espada corta hecha de hierro, adecuada para el combate cuerpo a cuerpo.",
                 "item_type": "W1H",
                 "rarity": "COM",
-                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "ROG", "BRD"],
+                "allowed_classes": ["RGR", "BBN", "FTR", "PAL", "ROG", "BRD"],
                 "cost_real": 2,
                 "damage_dice_count": 1,
                 "damage_dice_sides": 6,
@@ -455,7 +455,7 @@ class Command(BaseCommand):
                 "description": "Un sable de hoja curva y un solo filo, ideal para el combate cuerpo a cuerpo.",
                 "item_type": "W1H",
                 "rarity": "COM",
-                "allowed_classes": ["RGR", "BBN", "DRD", "FTR", "PAL", "ROG"],
+                "allowed_classes": ["BBN", "FTR", "PAL", "ROG"],
                 "cost_marco": 1,
                 "cost_talento": 2,
                 "damage_dice_count": 1,
@@ -471,7 +471,7 @@ class Command(BaseCommand):
                 "description": "Una hoz con una hoja oxidada, seguramente robada de alguna granja.",
                 "item_type": "W1H",
                 "rarity": "COM",
-                "allowed_classes": ["RGR", "BBN", "ART", "DRD", "FTR", "PAL", "ROG", "BRD"],
+                "allowed_classes": ["RGR", "BBN", "FTR", "PAL", "ROG", "BRD"],
                 "cost_iota": 8,
                 "damage_dice_count": 1,
                 "damage_dice_sides": 4,
@@ -485,7 +485,7 @@ class Command(BaseCommand):
                 "description": "Un látigo hecho de cuero, adecuado para mantener la distancia.",
                 "item_type": "W1H",
                 "rarity": "COM",
-                "allowed_classes": ["CLR", "BBN", "FTR", "PAL", "ROG", "RGR"],
+                "allowed_classes": ["CLR", "BBN", "FTR", "PAL", "ROG"],
                 "cost_talento": 2,
                 "damage_dice_count": 1,
                 "damage_dice_sides": 4,
@@ -633,10 +633,38 @@ class Command(BaseCommand):
                 "damage_dice_count": 1,
                 "damage_dice_sides": 12,
                 "bonus_damage": 0,
+                "bonus_dex": -1,
             },
 
+            # LANZA DE MADERA CON PUNTA DE HIERRO (COMÚN)
 
 
+            {
+                "name": "Lanza de Madera con Punta de Hierro",
+                "description": "Una lanza hecha de madera con una punta de hierro. Es adecuada para mantener la distancia en el combate.",
+                "item_type": "W2H",
+                "rarity": "COM",
+                "allowed_classes": ["BBN", "FTR"],
+                "cost_real": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 8,
+                "bonus_damage": 0,
+            },
+
+            # ALABARDA BÁSICA (COMÚN)
+
+            {
+                "name": "Alabarda Básica",
+                "description": "Una alabarda simple. Gran rango y poderosa en combate, pero difícil de manejar.",
+                "item_type": "W2H",
+                "rarity": "COM",
+                "allowed_classes": ["BBN", "FTR"],
+                "cost_marco": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 12,
+                "bonus_damage": 0,
+                "bonus_dex": -1,
+            },
 
 
         ]
