@@ -2,7 +2,7 @@ import random
 from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Sum
-from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic, InventorySlot, Monster, ItemRarity, CustomChart, ChartDataPoint
+from .models import GuildProfile, Adventurer, DeepWorkSession, Item, DailyHabit, DailyStatistic, InventorySlot, Monster, ItemRarity, CustomChart, ChartDataPoint, GuildUpgrade
 
 XP_PER_MINUTE = 10
 # Bono si la clase del aventurero hace sinergia con la tarea
@@ -276,6 +276,17 @@ def _seed_items_if_empty():
                             rarity='COM', cost_in_copper=5, description="Cura 10 HP")
 
 
+def _seed_guild_upgrades():
+    """Forja los planos de las mejoras de Gremio si no existen."""
+    if not GuildUpgrade.objects.exists():
+        GuildUpgrade.objects.create(key='mensajeria_arcana', name='Mensajería Arcana',
+                                    description='Envía el excedente de botín al cofre por 1 Drabín.', cost_coin='sueldo', cost_amount=5, req_prestige_level=1)
+        GuildUpgrade.objects.create(key='mochila_lv2', name='Mochilas de Contención',
+                                    description='Aumenta la mochila de los aventureros a 15 ranuras.', cost_coin='talento', cost_amount=2, req_prestige_level=2)
+        GuildUpgrade.objects.create(key='tablon_patroc', name='Tablón Patrocinado',
+                                    description='5% prob. de ítem épico al completar hábitos Rango S.', cost_coin='marco', cost_amount=1, req_prestige_level=3)
+
+
 def get_item_score(item):
     """Calcula el 'Poder Total' de un objeto sumando todas sus estadísticas."""
     if not item:
@@ -286,13 +297,13 @@ def get_item_score(item):
 
 
 def add_item_to_inventory(adv, item, event_log=None):
-    """Maneja la lógica de stacks de 16 y envío al cofre si la mochila está llena."""
+    """Maneja la lógica de stacks, mejoras de Gremio, y comisión de Mensajería Arcana."""
     guild, _ = GuildProfile.objects.get_or_create(id=1)
     is_stackable = item.item_type in ['CNS', 'MSC']
     color = ItemRarity.get_color(item.rarity)
 
+    # Intentar agrupar si es stackeable
     if is_stackable:
-        # Busca un stack que aún no llegue a 16
         slots = InventorySlot.objects.filter(
             adventurer=adv, item=item, quantity__lt=16)
         if slots.exists():
@@ -304,17 +315,65 @@ def add_item_to_inventory(adv, item, event_log=None):
                     f"{adv.name} guardó [[{color}]{item.name}[/]] (x{slot.quantity}).")
             return
 
-    # Si no es stackeable o no hay stacks con espacio, revisamos capacidad de slots
+    # Intentar usar un nuevo slot en la mochila (usa la propiedad dinámica)
     if adv.inventory.count() < adv.inventory_capacity:
-        add_item_to_inventory(adv, item, event_log)
+        InventorySlot.objects.create(adventurer=adv, item=item, quantity=1)
         if event_log is not None:
             event_log.append(
                 f"{adv.name} guardó [[{color}]{item.name}[/]] en su mochila.")
     else:
-        # Mochila llena, va al Gremio (infinito)
+        # if Mochila llena, intentar usar Mensajería Arcana
+        has_mensajeria = guild.unlocked_upgrades.filter(
+            upgrade__key='mensajeria_arcana').exists()
+        if not has_mensajeria:
+            if event_log is not None:
+                event_log.append(
+                    f"Mochila de {adv.name} llena. [[{color}]{item.name}[/]] fue abandonado (Requiere Mensajería Arcana).")
+            return
+
+        # Verificar Buff "Claridad Mental" (Escribir en el diario hoy)
+        today = timezone.now().date()
+        claridad_mental = JournalEntry.objects.filter(
+            created_at__date=today).exists()
+
+        fee_paid = False
+        fee_msg = ""
+
+        if claridad_mental:
+            fee_paid = True
+            fee_msg = "(Gratis por Claridad Mental)"
+        else:
+            # Intentar pagar 1 Drabín rompiendo monedas si es necesario
+            if guild.drabin >= 1:
+                guild.drabin -= 1
+                fee_paid = True
+            elif guild.iota >= 1:
+                guild.iota -= 1
+                guild.drabin += 9
+                fee_paid = True
+            elif guild.talento >= 1:
+                guild.talento -= 1
+                guild.iota += 9
+                guild.drabin += 9
+                fee_paid = True
+
+            if fee_paid:
+                fee_msg = "(-1 Drabín)"
+
+        if not fee_paid:
+            if event_log is not None:
+                event_log.append(
+                    f"Mochila llena. El Gremio no tiene fondos para el envío de [[{color}]{item.name}[/]]. Objeto perdido.")
+            return
+
+        # Si pagó o es gratis, se envía al cofre
+        if not claridad_mental:
+            guild.save()
+            universal_consolidate(guild)  # Ordenar el vuelto
+
         if event_log is not None:
             event_log.append(
-                f"Mochila de {adv.name} llena. [[{color}]{item.name}[/]] se envió al Cofre del Gremio.")
+                f"Mochila llena. Mensajeros llevaron [[{color}]{item.name}[/]] al Cofre {fee_msg}.")
 
         if is_stackable:
             g_slot, _ = InventorySlot.objects.get_or_create(
@@ -713,6 +772,7 @@ def is_class_allowed(adv, item):
 def market_phase(adventurers_qs, event_log):
     """Simula las compras inteligentes del mercado."""
     _seed_items_if_empty()
+    _seed_guild_upgrades()
     all_items = list(Item.objects.all())
 
     for adv in adventurers_qs:

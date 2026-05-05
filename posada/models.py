@@ -234,8 +234,14 @@ class Adventurer(WealthMixin):
         Item, on_delete=models.SET_NULL, null=True, blank=True, related_name='equipped_off')
 
     # --- Límite de Mochila ---
-    inventory_capacity = models.PositiveIntegerField(
-        default=10, help_text="Máximo de slots en la mochila")
+    @property
+    def inventory_capacity(self):
+        """Calcula la capacidad dinámicamente consultando el árbol de mejoras."""
+        base_capacity = 10
+        guild = GuildProfile.objects.first()
+        if guild and guild.unlocked_upgrades.filter(upgrade__key='mochila_lv2').exists():
+            return 15  # Capacidad expandida por mejora del gremio
+        return base_capacity
 
     level = models.PositiveIntegerField(default=1)
     experience = models.PositiveIntegerField(default=0)
@@ -496,3 +502,33 @@ class JournalEntry(models.Model):
 
     def __str__(self):
         return f"Entrada del {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+
+class GuildUpgrade(models.Model):
+    """El catálogo de mejoras disponibles en la tienda del Gremio."""
+    key = models.CharField(max_length=50, unique=True,
+                           help_text="ID interno (ej: mensajeria_arcana)")
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    cost_coin = models.CharField(
+        max_length=20, default='talento', help_text="Moneda requerida")
+    cost_amount = models.PositiveIntegerField(default=1)
+    req_prestige_level = models.PositiveIntegerField(
+        default=1, help_text="Nivel de Gremio requerido")
+
+    def __str__(self):
+        return self.name
+
+
+class GuildUnlockedUpgrade(models.Model):
+    """Registro de las mejoras que el Gremio ya ha comprado."""
+    guild = models.ForeignKey(
+        GuildProfile, on_delete=models.CASCADE, related_name='unlocked_upgrades')
+    upgrade = models.ForeignKey(GuildUpgrade, on_delete=models.CASCADE)
+    unlocked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('guild', 'upgrade')
+
+    def __str__(self):
+        return f"{self.guild} -> {self.upgrade.name}"
