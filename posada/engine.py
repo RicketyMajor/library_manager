@@ -795,7 +795,7 @@ def consolidate_wealth(guild_id):
 
 
 def calculate_chart_reward(chart):
-    """Calcula el Área bajo la curva para dar recompensas cuando el gráfico llega a su meta."""
+    """Calcula el Área bajo la curva usando proporciones sobre el área total del lienzo."""
     points = list(chart.data_points.all().order_by('x_value'))
     if not points:
         return {"status": "error", "message": "El gráfico está vacío."}
@@ -803,28 +803,39 @@ def calculate_chart_reward(chart):
     if points[-1].x_value < chart.goal_x_value:
         return {"status": "warning", "message": f"Aún no llegas a la meta (Día {chart.goal_x_value})."}
 
-    # Cálculo del área Suma de Riemann trapezoidal
+    # Área máxima teórica del rectángulo del gráfico
+    total_area = (chart.goal_x_value - chart.x_min) * \
+        (chart.y_max - chart.y_min)
+    if total_area <= 0:
+        total_area = 1.0  # Evita división por cero
+
+    # Cálculo del área real del usuario, Suma de Riemann trapezoidal
     area = 0
     for i in range(1, len(points)):
         dx = points[i].x_value - points[i-1].x_value
-        dy = (points[i].y_value + points[i-1].y_value) / 2.0
+        # La altura se mide desde el "suelo" del gráfico (y_min)
+        h1 = max(0.0, points[i-1].y_value - chart.y_min)
+        h2 = max(0.0, points[i].y_value - chart.y_min)
+        dy = (h1 + h2) / 2.0
         area += dx * dy
 
-    # Evaluación del Rango
+    rendimiento = area / total_area
+
+    # Evaluación del Rango basado en Porcentajes
     grade = 'C'
     if chart.polarity == 'POS':
-        if area >= chart.goal_x_value * 2.0:
-            grade = 'S'
-        elif area >= chart.goal_x_value * 1.0:
-            grade = 'A'
-        elif area >= chart.goal_x_value * 0.5:
+        if rendimiento >= 0.80:
+            grade = 'S'     # se llenó el 80% o más del gráfico
+        elif rendimiento >= 0.50:
+            grade = 'A'   # se llenó el 50% o más
+        elif rendimiento >= 0.25:
             grade = 'B'
-    else:
-        if area <= chart.goal_x_value * 0.5:
-            grade = 'S'
-        elif area <= chart.goal_x_value * 1.0:
+    else:  # Gráficos Negativos
+        if rendimiento <= 0.20:
+            grade = 'S'     # se llenó un 20% o menos (Excelente)
+        elif rendimiento <= 0.50:
             grade = 'A'
-        elif area <= chart.goal_x_value * 2.0:
+        elif rendimiento <= 0.75:
             grade = 'B'
 
     # Recompensas
@@ -843,10 +854,10 @@ def calculate_chart_reward(chart):
         adv.experience += xp_reward
         adv.save()
 
-    # Reiniciar el gráfico destruyendo los puntos para el próximo mes
+    # Reiniciar el gráfico
     chart.data_points.all().delete()
 
     return {
         "status": "success",
-        "message": f"¡Ciclo completado! Rango {grade}. Ganaste {xp_reward} XP y {coin_reward[1]} {coin_reward[0].title()}."
+        "message": f"¡Ciclo completado! Rango {grade} ({rendimiento*100:.1f}% del área). Ganaste {xp_reward} XP y {coin_reward[1]} {coin_reward[0].title()}."
     }

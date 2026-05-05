@@ -440,52 +440,52 @@ class NewHabitModal(ModalScreen[dict]):
 
 
 class NewChartModal(ModalScreen[dict]):
-    """Ventana para crear un nuevo lienzo de seguimiento (Tracker)."""
-
     CSS = """
-    #new_chart_dialog { width: 50; height: auto; padding: 1 2; border: solid $accent; background: $surface; }
+    #new_chart_dialog { width: 60; height: auto; padding: 1 2; border: solid $accent; background: $surface; }
     .modal_title { text-style: bold; color: $warning; text-align: center; margin-bottom: 1; width: 100%; }
     .btn_row { height: 3; align: center middle; margin-top: 1; }
     .btn_row Button { margin: 0 1; }
+    .grid_inputs { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; }
     """
 
     def compose(self) -> ComposeResult:
         with Vertical(id="new_chart_dialog"):
             yield Label("Crear Nuevo Tracker", classes="modal_title")
-            yield Input(placeholder="Título (Ej: Horas de Sueño)", id="chart_title")
-            yield Input(placeholder="Eje Y (Ej: Horas)", id="chart_y_label", value="Horas")
-            yield Input(placeholder="Eje X (Ej: Día del Mes)", id="chart_x_label", value="Día")
-            yield Input(placeholder="Meta Eje X (Ej: 30 para un mes)", id="chart_goal_x", value="30")
+            yield Input(placeholder="Título (Ej: Horas de Deep Work)", id="chart_title")
+
+            with Grid(classes="grid_inputs"):
+                yield Input(placeholder="Eje X Label", id="chart_x_label", value="Día")
+                yield Input(placeholder="Eje Y Label", id="chart_y_label", value="Horas")
+                yield Input(placeholder="X Mínimo (Ej: 1)", id="chart_x_min", value="1")
+                yield Input(placeholder="X Máximo/Meta (Ej: 30)", id="chart_goal_x", value="30")
+                yield Input(placeholder="Y Mínimo (Ej: 0)", id="chart_y_min", value="0")
+                yield Input(placeholder="Y Máximo (Ej: 6)", id="chart_y_max", value="6")
 
             yield Label("Polaridad del Gráfico:")
-            yield Select(
-                (("Positivo (Subir es bueno, ej: Ejercicio)", "POS"),
-                 ("Negativo (Bajar es bueno, ej: Redes Sociales)", "NEG")),
-                id="chart_polarity", value="POS"
-            )
+            yield Select((("Positivo (Subir es bueno)", "POS"), ("Negativo (Bajar es bueno)", "NEG")), id="chart_polarity", value="POS")
 
             with Horizontal(classes="btn_row"):
-                yield Button("Crear Gráfico", variant="success", id="btn_save_chart")
+                yield Button("Crear", variant="success", id="btn_save_chart")
                 yield Button("Cancelar", variant="error", id="btn_cancel_chart")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_cancel_chart":
             self.dismiss(None)
         elif event.button.id == "btn_save_chart":
-            title = self.query_one("#chart_title", Input).value
-            y_lbl = self.query_one("#chart_y_label", Input).value
-            x_lbl = self.query_one("#chart_x_label", Input).value
-            goal = self.query_one("#chart_goal_x", Input).value
-            pol = self.query_one("#chart_polarity", Select).value
-
-            if title and goal.isdigit():
+            try:
                 self.dismiss({
-                    "title": title, "y_label": y_lbl, "x_label": x_lbl,
-                    "goal_x": int(goal), "polarity": pol
+                    "title": self.query_one("#chart_title", Input).value,
+                    "y_label": self.query_one("#chart_y_label", Input).value,
+                    "x_label": self.query_one("#chart_x_label", Input).value,
+                    "x_min": float(self.query_one("#chart_x_min", Input).value),
+                    "goal_x": int(self.query_one("#chart_goal_x", Input).value),
+                    "y_min": float(self.query_one("#chart_y_min", Input).value),
+                    "y_max": float(self.query_one("#chart_y_max", Input).value),
+                    "polarity": self.query_one("#chart_polarity", Select).value
                 })
-            else:
+            except ValueError:
                 self.app.notify(
-                    "Faltan datos o la meta no es un número.", severity="error")
+                    "Asegúrate de que los rangos numéricos sean válidos.", severity="error")
 
 # --- MODAL DE AÑADIR DATO AL GRÁFICO ---
 
@@ -1239,13 +1239,16 @@ class PosadaMainScreen(Screen):
         y = chart_data.get("y_data", [])
 
         plt.theme("dark")
+
+        # --- APLICAR LÍMITES ABSOLUTOS ---
+        plt.xlim(chart_data.get('x_min', 1.0), chart_data.get('goal_x', 30))
+        plt.ylim(chart_data.get('y_min', 0.0), chart_data.get('y_max', 10.0))
+
         if x and y:
-            # Usa plot para líneas continuas en vez de bar
             plt.plot(x, y, marker="braille", color="cyan")
         else:
             plt.title("Presiona 'a' para añadir el primer dato.")
 
-        # Metadatos del gráfico
         plt.title(
             f"Meta: Día {chart_data['goal_x']} | {chart_data['polarity']}")
         plt.xlabel(chart_data['x_label'])

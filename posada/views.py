@@ -452,13 +452,11 @@ def list_charts(request):
     """Devuelve todos los gráficos activos y sus coordenadas ordenadas."""
     charts = CustomChart.objects.filter(is_active=True).order_by('created_at')
 
-    # Si no existe ningún gráfico, crea uno por defecto para Deep Work
     if not charts.exists():
         default_chart = CustomChart.objects.create(
             title="Horas de Deep Work",
-            y_axis_label="Horas",
-            x_axis_label="Día del Mes",
-            goal_x_value=30
+            y_axis_label="Horas", x_axis_label="Día del Mes",
+            x_min=1.0, goal_x_value=30, y_min=0.0, y_max=6.0
         )
         charts = [default_chart]
 
@@ -466,16 +464,14 @@ def list_charts(request):
     for c in charts:
         points = c.data_points.all().order_by('x_value')
         data.append({
-            "id": c.id,
-            "title": c.title,
-            "x_label": c.x_axis_label,
-            "y_label": c.y_axis_label,
-            "goal_x": c.goal_x_value,
+            "id": c.id, "title": c.title,
+            "x_label": c.x_axis_label, "y_label": c.y_axis_label,
+            "x_min": c.x_min, "goal_x": c.goal_x_value,
+            "y_min": c.y_min, "y_max": c.y_max,
             "polarity": c.get_polarity_display(),
             "x_data": [p.x_value for p in points],
             "y_data": [p.y_value for p in points],
         })
-
     return Response({"charts": data})
 
 
@@ -502,13 +498,16 @@ def add_chart_point(request):
 
 @api_view(['POST'])
 def create_chart(request):
-    """Permite crear un nuevo lienzo de tracking."""
+    """Permite crear un nuevo lienzo de tracking con límites absolutos."""
     try:
         chart = CustomChart.objects.create(
             title=request.data.get('title', 'Nuevo Tracker'),
             y_axis_label=request.data.get('y_label', 'Valor'),
             x_axis_label=request.data.get('x_label', 'Día'),
+            x_min=float(request.data.get('x_min', 1.0)),
             goal_x_value=int(request.data.get('goal_x', 30)),
+            y_min=float(request.data.get('y_min', 0.0)),
+            y_max=float(request.data.get('y_max', 10.0)),
             polarity=request.data.get('polarity', 'POS')
         )
         return Response({"status": "success", "message": f"Gráfico '{chart.title}' creado."})

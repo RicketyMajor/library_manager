@@ -452,8 +452,16 @@ class CustomChart(models.Model):
 
     polarity = models.CharField(
         max_length=3, choices=ChartPolarity.choices, default=ChartPolarity.POSITIVE)
+
+    # --- LÍMITES ABSOLUTOS ---
+    x_min = models.FloatField(
+        default=1.0, help_text="Inicio del Eje X (Ej: Día 1)")
     goal_x_value = models.PositiveIntegerField(
-        default=30, help_text="Valor de X donde se cierra el ciclo y se da la recompensa (Ej: Día 30)")
+        default=30, help_text="Fin del Eje X / Meta (Ej: Día 30)")
+    y_min = models.FloatField(
+        default=0.0, help_text="Suelo del Eje Y (Ej: 0 horas)")
+    y_max = models.FloatField(
+        default=10.0, help_text="Techo del Eje Y (Ej: 6 horas máximo)")
 
     # Estado del gráfico
     is_active = models.BooleanField(
@@ -461,7 +469,7 @@ class CustomChart(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Gráfico: {self.title} (Meta X: {self.goal_x_value})"
+        return f"Gráfico: {self.title} (Rango Y: {self.y_min}-{self.y_max})"
 
 
 class ChartDataPoint(models.Model):
