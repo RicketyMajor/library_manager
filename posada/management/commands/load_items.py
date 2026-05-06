@@ -666,6 +666,51 @@ class Command(BaseCommand):
                 "bonus_dex": -1,
             },
 
+            # ARCO CORTO (COMÚN)
+
+            {
+                "name": "Arco Corto",
+                "description": "Un arco corto. Es adecuado para el combate a distancia.",
+                "item_type": "W2H",
+                "rarity": "COM",
+                "allowed_classes": ["RGR"],
+                "cost_marco": 1,
+                "cost_talento": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 6,
+                "bonus_damage": 0,
+            },
+
+            # ARCO LARGO (COMÚN)
+
+            {
+                "name": "Arco Largo",
+                "description": "Un arco largo. Las flechas llegan a una mayor distancia y mayor poder de penetración.",
+                "item_type": "W2H",
+                "rarity": "COM",
+                "allowed_classes": ["RGR"],
+                "cost_marco": 2,
+                "cost_real": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 8,
+                "bonus_damage": 1,
+            },
+
+            # BALLESTA LIGERA (COMÚN)
+
+            {
+                "name": "Ballesta Ligera",
+                "description": "Una ballesta ligera, con un mayor poder perforante que un arco.",
+                "item_type": "W2H",
+                "rarity": "COM",
+                "allowed_classes": ["RGR", "ART"],
+                "cost_marco": 2,
+                "cost_real": 2,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 8,
+                "bonus_damage": 2,
+                "bonus_dex": -1,
+            },
 
         ]
 
