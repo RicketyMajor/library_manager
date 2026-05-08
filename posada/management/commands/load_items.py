@@ -712,6 +712,22 @@ class Command(BaseCommand):
                 "bonus_dex": -1,
             },
 
+            # BÁCULO DE ROBLE (COMÚN)
+
+            {
+                "name": "Báculo de Roble",
+                "description": "Un báculo de roble para lanzar hechizos de nivel medio.",
+                "item_type": "W2H",
+                "rarity": "COM",
+                "allowed_classes": ["WIZ", "SOR", "DRD", "WLK"],
+                "cost_iota": 5,
+                "damage_dice_count": 1,
+                "damage_dice_sides": 8,
+                "bonus_damage": 0,
+            },
+
+
+
         ]
 
         self.stdout.write("Forjando los ítems en la base de datos...")
