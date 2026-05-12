@@ -288,7 +288,6 @@ class Command(BaseCommand):
                 "allowed_classes": ["FTR", "PAL"],
                 "cost_marco": 1,
                 "bonus_armor": 4,
-                "bonus_con": 1,
             },
 
             # CONJUNTO DE COTA DE ANILLAS (COMÚN)
@@ -847,6 +846,62 @@ class Command(BaseCommand):
                 "bonus_armor": 3,
             },
 
+            # CONJUNTO DE MALLA DE ACERO (POCO COMÚN)
+
+            {
+                "name": "Cofia de Malla de Acero",
+                "description": "Una cofia hecha de mallas de acero. Es además de resistente, una pieza flexible.",
+                "item_type": "HED",
+                "rarity": "UNC",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 7,
+                "cost_real": 2,
+                "bonus_armor": 6,
+            },
+
+            {
+                "name": "Peto de Malla de Acero",
+                "description": "Un peto hecho de mallas de acero. Brinda una protección sólida para el torso.",
+                "item_type": "TRS",
+                "rarity": "UNC",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 7,
+                "cost_real": 2,
+                "bonus_armor": 6,
+            },
+
+            {
+                "name": "Brafoneras de Malla de Acero",
+                "description": "Unas brafoneras hechas de mallas de acero. Son además de resistentes, flexibles.",
+                "item_type": "LGS",
+                "rarity": "UNC",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 7,
+                "cost_real": 2,
+                "bonus_armor": 6,
+            },
+
+            {
+                "name": "Botas de Malla de Acero",
+                "description": "Unas botas hechas de mallas de acero. Son además de resistentes, flexibles.",
+                "item_type": "FET",
+                "rarity": "UNC",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 7,
+                "cost_real": 2,
+                "bonus_armor": 6,
+            },
+
+            {
+                "name": "Guantes de Malla de Acero",
+                "description": "Unos guantes hechos de mallas de acero. Son además de resistentes, flexibles.",
+                "item_type": "HND",
+                "rarity": "UNC",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 7,
+                "cost_real": 2,
+                "bonus_armor": 6,
+            },
 
 
         ]
