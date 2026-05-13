@@ -21,20 +21,24 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 
+# Convención única de entorno virtual para todo el equipo
+VENV_DIR=".venv"
+
 # 2. Creación del Entorno Virtual
-echo -e "${GREEN}▶ Configurando entorno virtual (venv)...${NC}"
-python3 -m venv venv
-source venv/bin/activate
+echo -e "${GREEN}▶ Configurando entorno virtual (${VENV_DIR})...${NC}"
+python3 -m venv "$VENV_DIR"
+source "$VENV_DIR/bin/activate"
 
 # 3. Instalación de Dependencias del CLI
 echo -e "${GREEN}▶ Instalando dependencias del CLI...${NC}"
-pip install -e . > /dev/null 2>&1
-pip install pyfiglet > /dev/null 2>&1
+python -m pip install --upgrade pip > /dev/null 2>&1
+python -m pip install -r requirements.txt > /dev/null 2>&1
+python -m pip install -e . > /dev/null 2>&1
 
 # 4. Creación del Enlace Simbólico Global 
 echo -e "${GREEN}▶ Creando comando global 'bunker' (te pedirá contraseña si es necesario)...${NC}"
 CURRENT_DIR=$(pwd)
-sudo ln -sf "$CURRENT_DIR/venv/bin/bunker" /usr/local/bin/bunker
+sudo ln -sf "$CURRENT_DIR/$VENV_DIR/bin/bunker" /usr/local/bin/bunker
 
 # 5. Aprovisionamiento de Claves Aisladas para Túneles Seguros
 echo -e "${GREEN}▶ Aprovisionando criptografía dedicada para el escáner...${NC}"
@@ -51,5 +55,5 @@ echo -e "${GREEN} ¡Instalación completada con éxito!${NC}"
 echo -e "Puedes iniciar tu biblioteca desde cualquier lugar escribiendo: ${YELLOW}bunker enter${NC}"
 echo -e "${CYAN}================================================${NC}\n"
 
-# Desactivamos el venv para dejar la terminal limpia
+# Desactivamos el entorno virtual para dejar la terminal limpia
 deactivate

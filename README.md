@@ -204,9 +204,27 @@ docker-compose exec web python manage.py migrate
 docker-compose exec web python manage.py createsuperuser
 ```
 
-### 6. Instalar el Cliente de Terminal
+### 6. Instalar el Cliente de Terminal (entorno estándar: `.venv`)
 
 ```bash
 chmod +x install.sh
 ./install.sh
+```
+
+El instalador crea y utiliza de forma exclusiva el entorno virtual `.venv/` en la raíz del proyecto.
+
+Para activar manualmente el entorno en una nueva terminal:
+
+```bash
+source .venv/bin/activate
+```
+
+Para recrearlo desde cero en cualquier equipo:
+
+```bash
+rm -rf .venv
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
