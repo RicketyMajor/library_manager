@@ -955,6 +955,57 @@ class Command(BaseCommand):
                 "bonus_armor": 5,
             },
 
+            # CONJUNTO DE ARMADURA DE PLACAS DE ACERO (POCO COMÚN)
+
+            {
+                "name": "Yelmo de Placas de Acero",
+                "description": "Un yelmo formado por placas de acero interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para la cabeza.",
+                "item_type": "HED",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 15,
+                "bonus_armor": 8,
+            },
+
+            {
+                "name": "Peto de Placas de Acero",
+                "description": "Un peto formado por placas de acero interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para el torso.",
+                "item_type": "TRS",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 15,
+                "bonus_armor": 8,
+            },
+
+            {
+                "name": "Grebas de Placas de Acero",
+                "description": "Unas grebas formadas por placas de acero interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para las piernas.",
+                "item_type": "FET",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 15,
+                "bonus_armor": 8,
+            },
+
+            {
+                "name": "Botas de Placas de Acero",
+                "description": "Unas botas formadas por placas de acero interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para los pies.",
+                "item_type": "FET",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 15,
+                "bonus_armor": 8,
+            },
+
+            {
+                "name": "Guanteletes de Placas de Acero",
+                "description": "Unos guanteletes formadas por placas de acero interconectadas. Es una pieza de armadura pesada que ofrece una protección sólida para las manos.",
+                "item_type": "HND",
+                "rarity": "COM",
+                "allowed_classes": ["FTR", "PAL"],
+                "cost_marco": 15,
+                "bonus_armor": 8,
+            },
 
         ]
 
